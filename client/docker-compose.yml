@@ -1,0 +1,49 @@
+version: "3.8"
+
+services:
+  # Development service
+  client-dev:
+    build:
+      context: .
+      target: development
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    command: npm run dev -- --host 0.0.0.0
+    networks:
+      - app-network
+
+  # Production service
+  client-prod:
+    build:
+      context: .
+      target: production
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+  # Backend service (for local development)
+  backend:
+    image: video-transcriber-ai:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - SECRET_KEY=your-secret-key-here-change-in-production
+      - LOG_LEVEL=INFO
+      - ALLOWED_ORIGINS=http://localhost:5173,http://localhost:80
+    volumes:
+      - ../server/data:/app/data
+      - ../server/uploads:/app/uploads
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
