@@ -33,11 +33,6 @@ COPY . .
 # Create necessary directories
 RUN mkdir -p /app/data/videos /app/data/transcripts /app/uploads
 
-# Create non-root user for security
-RUN groupadd -r appuser && useradd -r -g appuser appuser
-RUN chown -R appuser:appuser /app
-USER appuser
-
 # Expose port
 EXPOSE 8000
 
