@@ -1,11 +1,11 @@
 import { useState } from "react";
-import type { Video } from "../types/video";
+import type { VideoInfo } from "../types/video";
 
 export const useVideoSelection = () => {
-  const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<VideoInfo | null>(null);
   const [showUpload, setShowUpload] = useState(false);
 
-  const selectVideo = (video: Video) => {
+  const selectVideo = (video: VideoInfo) => {
     setSelectedVideo(video);
     setShowUpload(false);
   };
@@ -19,9 +19,14 @@ export const useVideoSelection = () => {
     setShowUpload(false);
   };
 
-  const handleUploadComplete = (newVideo: Video) => {
+  const handleUploadComplete = (newVideo: VideoInfo) => {
     setShowUpload(false);
+    setSelectedVideo(newVideo);
     return newVideo;
+  };
+
+  const clearSelection = () => {
+    setSelectedVideo(null);
   };
 
   return {
@@ -31,5 +36,6 @@ export const useVideoSelection = () => {
     showUploadForm,
     hideUploadForm,
     handleUploadComplete,
+    clearSelection,
   };
 };

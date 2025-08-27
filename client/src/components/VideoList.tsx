@@ -7,24 +7,23 @@ import {
   Calendar,
   Clock,
 } from "lucide-react";
-import type { Video } from "../types";
+import type { VideoInfo } from "../types/video";
 
 interface VideoListProps {
   onVideoSelect: (videoId: string | null) => void;
 }
 
 const VideoList = ({ onVideoSelect }: VideoListProps) => {
-  const [videos, setVideos] = useState<Video[]>([]);
+  const [videos, setVideos] = useState<VideoInfo[]>([]);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
 
   // Mock data for demonstration
   useEffect(() => {
-    const mockVideos: Video[] = [
+    const mockVideos: VideoInfo[] = [
       {
-        id: "1",
-        name: "Sample Video 1.mp4",
-        url: "#",
-        uploadedAt: new Date("2024-01-15"),
+        video_id: "1",
+        filename: "Sample Video 1.mp4",
+        created_at: new Date("2024-01-15").toISOString(),
         status: "completed",
         transcript:
           "This is a sample transcript for the first video. It contains the spoken content and can be quite long depending on the video length.",
@@ -32,10 +31,9 @@ const VideoList = ({ onVideoSelect }: VideoListProps) => {
           "This video discusses the basics of machine learning and artificial intelligence, covering key concepts and practical applications.",
       },
       {
-        id: "2",
-        name: "Sample Video 2.mp4",
-        url: "#",
-        uploadedAt: new Date("2024-01-20"),
+        video_id: "2",
+        filename: "Sample Video 2.mp4",
+        created_at: new Date("2024-01-20").toISOString(),
         status: "completed",
         transcript:
           "Another sample transcript for the second video. This demonstrates how transcripts are displayed in the interface.",
@@ -43,10 +41,9 @@ const VideoList = ({ onVideoSelect }: VideoListProps) => {
           "A comprehensive overview of data science methodologies, including data collection, analysis, and visualization techniques.",
       },
       {
-        id: "3",
-        name: "Sample Video 3.mp4",
-        url: "#",
-        uploadedAt: new Date("2024-01-25"),
+        video_id: "3",
+        filename: "Sample Video 3.mp4",
+        created_at: new Date("2024-01-25").toISOString(),
         status: "processing",
       },
     ];
@@ -58,21 +55,21 @@ const VideoList = ({ onVideoSelect }: VideoListProps) => {
     onVideoSelect(videoId);
   };
 
-  const downloadTranscript = (video: Video) => {
+  const downloadTranscript = (video: VideoInfo) => {
     if (!video.transcript) return;
 
     const blob = new Blob([video.transcript], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${video.name.replace(/\.[^/.]+$/, "")}_transcript.txt`;
+    a.download = `${video.filename.replace(/\.[^/.]+$/, "")}_transcript.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
-  const getStatusBadge = (status: Video["status"]) => {
+  const getStatusBadge = (status: VideoInfo["status"]) => {
     const statusConfig = {
       uploading: { color: "bg-blue-100 text-blue-800", text: "Uploading" },
       processing: {
@@ -83,7 +80,7 @@ const VideoList = ({ onVideoSelect }: VideoListProps) => {
       error: { color: "bg-red-100 text-red-800", text: "Error" },
     };
 
-    const config = statusConfig[status];
+    const config = statusConfig[status as keyof typeof statusConfig];
     return (
       <span
         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.color}`}
@@ -114,13 +111,13 @@ const VideoList = ({ onVideoSelect }: VideoListProps) => {
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           {videos.map((video) => (
             <div
-              key={video.id}
+              key={video.video_id}
               className={`bg-white rounded-lg border shadow-sm cursor-pointer transition-all hover:shadow-md ${
-                selectedVideo === video.id
+                selectedVideo === video.video_id
                   ? "ring-2 ring-blue-500 border-blue-500"
                   : "border-gray-200"
               }`}
-              onClick={() => handleVideoSelect(video.id)}
+              onClick={() => handleVideoSelect(video.video_id)}
             >
               <div className="p-6">
                 <div className="flex items-start justify-between mb-4">
@@ -129,12 +126,12 @@ const VideoList = ({ onVideoSelect }: VideoListProps) => {
                 </div>
 
                 <h3 className="font-medium text-gray-900 mb-2 line-clamp-2">
-                  {video.name}
+                  {video.filename}
                 </h3>
 
                 <div className="flex items-center text-sm text-gray-500 mb-3">
                   <Calendar className="h-4 w-4 mr-1" />
-                  {video.uploadedAt.toLocaleDateString()}
+                  {new Date(video.created_at).toLocaleDateString()}
                 </div>
 
                 {video.status === "completed" &&
@@ -176,7 +173,7 @@ const VideoList = ({ onVideoSelect }: VideoListProps) => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleVideoSelect(video.id);
+                          handleVideoSelect(video.video_id);
                         }}
                         className="flex-1 inline-flex items-center justify-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                       >
@@ -204,7 +201,8 @@ const VideoList = ({ onVideoSelect }: VideoListProps) => {
             <div className="flex items-center space-x-2">
               <Eye className="h-5 w-5 text-blue-600" />
               <span className="text-sm font-medium text-blue-900">
-                Selected: {videos.find((v) => v.id === selectedVideo)?.name}
+                Selected:{" "}
+                {videos.find((v) => v.video_id === selectedVideo)?.filename}
               </span>
             </div>
             <button

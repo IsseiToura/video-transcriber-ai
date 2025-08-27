@@ -1,56 +1,65 @@
 import { useState, useEffect } from "react";
-import type { Video } from "../types/video";
-import { mockVideos } from "../data/mockVideos";
+import { VideoService } from "../services/videoService";
+import { useAuth } from "../contexts/AuthContext";
+import type { VideoInfo } from "../types/video";
 
 export const useVideos = () => {
-  const [videos, setVideos] = useState<Video[]>([]);
+  const [videos, setVideos] = useState<VideoInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
+  const videoService = new VideoService();
+
+  // Fetch videos from server
+  const fetchVideos = async () => {
+    if (!user?.access_token) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const fetchedVideos = await videoService.getAllVideos(user.access_token);
+      setVideos(fetchedVideos);
+    } catch (err) {
+      console.error("Error fetching videos:", err);
+      setError("Failed to fetch videos");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    setVideos(mockVideos);
-  }, []);
+    fetchVideos();
+  }, [user?.access_token]);
 
-  const addVideo = (newVideo: Video) => {
+  const addVideo = (newVideo: VideoInfo) => {
     setVideos((prev) => [...prev, newVideo]);
   };
 
-  const updateVideoStatus = (videoId: string, status: Video["status"]) => {
+  const updateVideoStatus = (videoId: string, status: VideoInfo["status"]) => {
     setVideos((prev) =>
-      prev.map((v) => (v.id === videoId ? { ...v, status } : v))
+      prev.map((v) => (v.video_id === videoId ? { ...v, status } : v))
     );
   };
 
-  const updateVideoTranscript = (
-    videoId: string,
-    transcript: string,
-    summary: string
-  ) => {
-    setVideos((prev) =>
-      prev.map((v) =>
-        v.id === videoId
-          ? { ...v, transcript, summary, status: "completed" }
-          : v
-      )
-    );
+  const removeVideo = (videoId: string) => {
+    setVideos((prev) => prev.filter((v) => v.video_id !== videoId));
   };
 
-  const handleTranscriptGeneration = async (videoId: string) => {
-    // Simulate transcript generation
-    updateVideoStatus(videoId, "processing");
-
-    setTimeout(() => {
-      updateVideoTranscript(
-        videoId,
-        "This is a generated transcript for the video content. It contains all the spoken words and can be used for analysis and question answering.",
-        "This is an AI-generated summary of the video content, highlighting key points and main concepts discussed."
-      );
-    }, 3000);
+  const refreshVideos = () => {
+    fetchVideos();
   };
 
   return {
     videos,
+    loading,
+    error,
     addVideo,
     updateVideoStatus,
-    updateVideoTranscript,
-    handleTranscriptGeneration,
+    removeVideo,
+    refreshVideos,
   };
 };

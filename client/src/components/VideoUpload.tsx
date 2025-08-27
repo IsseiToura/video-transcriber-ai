@@ -1,26 +1,17 @@
 import { useState, useRef } from "react";
-import {
-  Upload,
-  FileVideo,
-  X,
-  CheckCircle,
-  AlertCircle,
-  Sparkles,
-  Zap,
-} from "lucide-react";
-import type { Video } from "../types";
+import { Upload, FileVideo, Sparkles, Zap } from "lucide-react";
+import type { VideoInfo } from "../types/video";
 import { VideoService } from "../services";
 import { useAuth } from "../contexts/AuthContext";
+import toast from "react-hot-toast";
 
 interface VideoUploadProps {
-  onUploadComplete: (video: Video) => void;
+  onUploadComplete: (video: VideoInfo) => void;
 }
 
 const VideoUpload = ({ onUploadComplete }: VideoUploadProps) => {
   const { user } = useAuth();
   const [dragActive, setDragActive] = useState(false);
-  const [uploadedVideos, setUploadedVideos] = useState<Video[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDrag = (e: React.DragEvent) => {
@@ -63,80 +54,39 @@ const VideoUpload = ({ onUploadComplete }: VideoUploadProps) => {
       return;
     }
 
-    const video: Video = {
-      id: Date.now().toString(),
-      name: file.name,
-      url: URL.createObjectURL(file),
-      uploadedAt: new Date(),
+    const video: VideoInfo = {
+      video_id: Date.now().toString(),
+      filename: file.name,
+      created_at: new Date().toISOString(),
       status: "uploading",
     };
-
-    setUploadedVideos((prev) => [...prev, video]);
-    setIsUploading(true);
 
     try {
       // Use VideoService for upload
       const videoService = new VideoService();
       const result = await videoService.uploadVideo(file, user.access_token);
 
-      // Update video with server response - mark as uploaded, not processing
+      // Update video with server response - mark as uploaded
       const uploadedVideo = {
         ...video,
-        id: result.video_id,
+        video_id: result.video_id,
         status: "uploaded" as const,
       };
 
-      setUploadedVideos((prev) =>
-        prev.map((v) => (v.id === video.id ? uploadedVideo : v))
-      );
-
-      // Notify parent component that upload is complete
+      // Notify parent component that upload is complete (this will also select the video)
       onUploadComplete(uploadedVideo);
+
+      // Dismiss loading toast and show success toast
+      toast.success(
+        "Video uploaded successfully! Redirecting to processing..."
+      );
     } catch (error) {
       console.error("Upload error:", error);
-
-      const errorVideo = {
-        ...video,
-        status: "error" as const,
-      };
-
-      setUploadedVideos((prev) =>
-        prev.map((v) => (v.id === video.id ? errorVideo : v))
+      toast.error(
+        `Upload failed: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
       );
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const removeVideo = (id: string) => {
-    setUploadedVideos((prev) => prev.filter((v) => v.id !== id));
-  };
-
-  const getStatusIcon = (status: Video["status"]) => {
-    switch (status) {
-      case "uploading":
-        return (
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
-        );
-      case "uploaded":
-        return <CheckCircle className="h-4 w-4 text-green-600" />;
-      case "error":
-        return <AlertCircle className="h-4 w-4 text-red-600" />;
-      default:
-        return null;
-    }
-  };
-
-  const getStatusText = (status: Video["status"]) => {
-    switch (status) {
-      case "uploading":
-        return "Uploading...";
-      case "uploaded":
-        return "Uploaded";
-      case "error":
-        return "Error";
-      default:
-        return "";
     }
   };
 
@@ -216,53 +166,6 @@ const VideoUpload = ({ onUploadComplete }: VideoUploadProps) => {
           </div>
         </div>
       </div>
-
-      {/* Uploaded Videos List */}
-      {uploadedVideos.length > 0 && (
-        <div className="space-y-6">
-          <h3 className="text-2xl font-bold text-gray-900 text-center mb-6">
-            Upload Progress
-          </h3>
-          <div className="grid gap-6">
-            {uploadedVideos.map((video) => (
-              <div
-                key={video.id}
-                className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl border border-white/40 shadow-lg hover:shadow-xl transition-all duration-200"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="h-12 w-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                      <FileVideo className="h-6 w-6 text-white" />
-                    </div>
-                    <div>
-                      <div className="text-lg font-semibold text-gray-900">
-                        {video.name}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        Uploaded {video.uploadedAt.toLocaleString()}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-4">
-                    <div className="flex items-center space-x-2">
-                      {getStatusIcon(video.status)}
-                      <span className="text-sm font-medium text-gray-600">
-                        {getStatusText(video.status)}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => removeVideo(video.id)}
-                      className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors duration-200"
-                    >
-                      <X className="h-5 w-5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 };

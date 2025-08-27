@@ -24,38 +24,16 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
-      timeout: 10s
+      timeout: 30s
       retries: 3
-      start_period: 40s
+      start_period: 5s
 
-  # Frontend Client (Production)
+  # Frontend Client (Development)
   frontend:
     build:
       context: ./client
-      target: production
       dockerfile: Dockerfile
     container_name: video-transcriber-frontend
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
-    networks:
-      - app-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-  # Frontend Client (Development - Optional)
-  frontend-dev:
-    build:
-      context: ./client
-      target: development
-      dockerfile: Dockerfile
-    container_name: video-transcriber-frontend-dev
     restart: unless-stopped
     ports:
       - "5173:5173"
@@ -69,27 +47,20 @@ services:
       - backend
     networks:
       - app-network
-    profiles:
-      - dev
-
-  # Nginx Reverse Proxy (Optional - for advanced routing)
-  nginx-proxy:
-    image: nginx:alpine
-    container_name: video-transcriber-nginx-proxy
-    restart: unless-stopped
-    ports:
-      - "443:443"
-      - "80:80"
-    volumes:
-      - ./nginx-proxy.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - frontend
-      - backend
-    networks:
-      - app-network
-    profiles:
-      - proxy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:5173",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 networks:
   app-network:

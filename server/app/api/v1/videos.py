@@ -2,16 +2,14 @@
 Video endpoints.
 """
 
-import os
 from fastapi import APIRouter, HTTPException, status, UploadFile, File, Depends, Header
-from fastapi.responses import FileResponse
+from fastapi.responses import PlainTextResponse
 from app.schemas.video import (
-    VideoUploadResponse, VideoInfo, ChatRequest, 
-    ChatResponse, ProcessResponse
+    VideoUploadResponse, VideoInfo, ProcessResponse
 )
+from typing import List
 from app.services.video_service import VideoService
 from app.core.security import verify_token
-from typing import Optional
 
 router = APIRouter()
 video_service = VideoService()
@@ -78,7 +76,7 @@ async def upload_video(
     
     # Save video
     try:
-        video_id = video_service.save_video(content, file.filename)
+        video_id = video_service.save_video(content, file.filename, current_user["username"])
         return VideoUploadResponse(
             video_id=video_id,
             filename=file.filename,
@@ -88,6 +86,20 @@ async def upload_video(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error saving video: {str(e)}"
+        )
+
+@router.get("/", response_model=List[VideoInfo])
+async def get_videos(
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all videos for the current user."""
+    try:
+        videos = video_service.get_all_videos(current_user["username"])
+        return videos
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching videos: {str(e)}"
         )
 
 @router.get("/{video_id}", response_model=VideoInfo)
@@ -102,6 +114,11 @@ async def get_video_info(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Video not found"
         )
+    if video_info.get("owner_username") != current_user["username"]:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video not found"
+        )
     
     return VideoInfo(
         video_id=video_id,
@@ -109,8 +126,23 @@ async def get_video_info(
         summary=video_info.get("summary"),
         transcript=video_info.get("transcript"),
         created_at=video_info["created_at"],
-        processed=video_info.get("processed", False)
+        status=video_info.get("status", "uploaded")
     )
+
+@router.delete("/{video_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_video(
+    video_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete a video and its associated artifacts."""
+    deleted = video_service.delete_video(video_id, current_user["username"])
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video not found"
+        )
+    # 204 No Content
+    return None
 
 @router.post("/{video_id}/process", response_model=ProcessResponse)
 async def process_video(
@@ -119,7 +151,7 @@ async def process_video(
 ):
     """Process video: extract audio, transcribe, summarize."""
     try:
-        result = video_service.process_video(video_id)
+        result = video_service.process_video(video_id, current_user["username"])
         return ProcessResponse(
             message="Video processed successfully",
             video_id=video_id,
@@ -137,20 +169,19 @@ async def process_video(
             detail=f"Error processing video: {str(e)}"
         )
 
-@router.get("/{video_id}/transcript")
-async def get_transcript(
+@router.get("/{video_id}/transcript", response_class=PlainTextResponse)
+async def get_transcript_text(
     video_id: str,
     current_user: dict = Depends(get_current_user)
 ):
-    """Get video transcript."""
-    transcript = video_service.get_transcript(video_id)
+    """Get video transcript as plain text (transcript.txt content)."""
+    transcript = video_service.get_transcript(video_id, current_user["username"])
     if not transcript:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Transcript not found. Please process the video first."
         )
-    
-    return {"transcript": transcript}
+    return transcript
 
 @router.get("/{video_id}/summary")
 async def get_summary(
@@ -158,7 +189,7 @@ async def get_summary(
     current_user: dict = Depends(get_current_user)
 ):
     """Get video summary."""
-    summary = video_service.get_summary(video_id)
+    summary = video_service.get_summary(video_id, current_user["username"])
     if not summary:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -166,22 +197,3 @@ async def get_summary(
         )
     
     return {"summary": summary}
-
-@router.post("/{video_id}/chat", response_model=ChatResponse)
-async def chat_with_video(
-    video_id: str,
-    chat_request: ChatRequest,
-    current_user: dict = Depends(get_current_user)
-):
-    """Chat with video content using RAG."""
-    try:
-        answer = video_service.chat_with_video(video_id, chat_request.question)
-        return ChatResponse(
-            answer=answer,
-            sources=None  # In a full implementation, this would include source references
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing chat request: {str(e)}"
-        )

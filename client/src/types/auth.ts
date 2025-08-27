@@ -11,13 +11,6 @@ export interface LoginResponse {
   user_id: string;
 }
 
-export interface AuthenticatedUser {
-  username: string;
-  role: string;
-  email: string;
-}
-
-// Client-side user interface
 export interface User {
   id: string;
   username: string;

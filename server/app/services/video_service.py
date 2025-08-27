@@ -2,16 +2,18 @@
 Video processing service.
 """
 
-import os
 import json
+import shutil
 import uuid
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, List
+import os
 from .audio_processor import AudioProcessor
 from app.core.config import get_settings
 from .text_compressor import TextCompressor
+from .summary_generator import SummaryGenerator
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -29,6 +31,7 @@ class VideoService:
         self.metadata_file = self.videos_dir / "metadata.json"
         self.audio_processor = AudioProcessor()
         self.text_compressor = TextCompressor()
+        self.summary_generator = SummaryGenerator()
         self._load_metadata()
     
     def _load_metadata(self):
@@ -45,8 +48,8 @@ class VideoService:
         with open(self.metadata_file, 'w') as f:
             json.dump(self.metadata, f, indent=2, default=str)
     
-    def save_video(self, file_content: bytes, filename: str) -> str:
-        """Save uploaded video or audio file."""
+    def save_video(self, file_content: bytes, filename: str, owner_username: str) -> str:
+        """Save uploaded video or audio file and record owner."""
         file_id = str(uuid.uuid4())
         file_path = self.videos_dir / f"{file_id}_{filename}"
         
@@ -63,8 +66,13 @@ class VideoService:
             "file_path": str(file_path),
             "file_type": "audio" if is_audio else "video",
             "created_at": datetime.now().isoformat(),
-            "processed": False
+            "status": "uploading",
+            "owner_username": owner_username,
         }
+        self._save_metadata()
+        
+        # Update status to uploaded after successful save
+        self.metadata[file_id]["status"] = "uploaded"
         self._save_metadata()
         
         return file_id
@@ -73,12 +81,81 @@ class VideoService:
         """Get video or audio file information."""
         return self.metadata.get(video_id)
     
-    def process_video(self, video_id: str) -> Dict:
+    def get_all_videos(self, owner_username: str) -> List[Dict]:
+        """Get all videos for a specific owner."""
+        videos = []
+        for video_id, video_info in self.metadata.items():
+            if video_info.get("owner_username") != owner_username:
+                continue
+            videos.append({
+                "video_id": video_id,
+                "filename": video_info["filename"],
+                "summary": video_info.get("summary"),
+                "transcript": video_info.get("transcript"),
+                "created_at": video_info["created_at"],
+                "status": video_info.get("status", "uploaded")
+            })
+        return videos
+
+    def _assert_ownership(self, video_id: str, owner_username: str) -> bool:
+        """Return True if the given user owns the video_id."""
+        info = self.metadata.get(video_id)
+        if not info:
+            return False
+        return info.get("owner_username") == owner_username
+    
+    def delete_video(self, video_id: str, owner_username: str) -> bool:
+        """Delete files whose paths are stored in metadata, then remove metadata entry.
+        
+        Returns True if the video existed and was removed, else False.
+        """
+        info = self.metadata.get(video_id)
+        if not info:
+            return False
+        if info.get("owner_username") != owner_username:
+            # Do not allow deleting others' videos
+            return False
+        
+        for key in ["file_path", "audio_path", "transcript_path", "transcript_metadata_path"]:
+            path_str = info.get(key)
+            if not path_str:
+                continue
+            path = Path(path_str)
+            try:
+                if path.exists() and path.is_file():
+                    path.unlink()
+            except Exception:
+                # Keep deletion best-effort; do not raise
+                pass
+
+        # Also attempt to remove the per-video transcript directory if present (new structure only)
+        tp = info.get("transcript_path")
+        if tp:
+            try:
+                transcript_dir = Path(tp).parent
+                # Only remove if this is exactly .../transcripts/{video_id}
+                if (
+                    transcript_dir.exists()
+                    and transcript_dir.is_dir()
+                    and transcript_dir.parent == self.transcript_dir
+                    and transcript_dir.name == video_id
+                ):
+                    shutil.rmtree(transcript_dir)
+            except Exception:
+                pass
+        
+        self.metadata.pop(video_id, None)
+        self._save_metadata()
+        return True
+    
+    def process_video(self, video_id: str, owner_username: str) -> Dict:
         """Process video or audio: extract audio, transcribe, summarize."""
         logger.info(f"Starting video processing for ID: {video_id}")
         
         if video_id not in self.metadata:
             raise ValueError("File not found")
+        if not self._assert_ownership(video_id, owner_username):
+            raise ValueError("Not allowed")
         
         file_info = self.metadata[video_id]
         file_path = Path(file_info["file_path"])
@@ -86,27 +163,38 @@ class VideoService:
         if not file_path.exists():
             raise ValueError("File not found")
         
-        # For audio files, use directly; for video files, extract audio
-        if file_info["file_type"] == "audio":
-            audio_path = file_path
-        else:
-            # Extract audio from video
-            audio_path = self.videos_dir / f"{video_id}_audio.wav"
-            self.audio_processor.extract_audio(file_path, audio_path)
+        # Update status to processing
+        self.metadata[video_id]["status"] = "processing"
+        self._save_metadata()
         
-        # Transcribe audio and save transcript
-        segments = self.audio_processor.transcribe_audio(audio_path)
-        transcript_data = self._save_transcript(video_id, segments)
+        try:
+            # For audio files, use directly; for video files, extract audio
+            if file_info["file_type"] == "audio":
+                audio_path = file_path
+            else:
+                # Extract audio from video
+                audio_path = self.videos_dir / f"{video_id}_audio.wav"
+                self.audio_processor.extract_audio(file_path, audio_path)
+            
+            # Transcribe audio and save transcript
+            segments = self.audio_processor.transcribe_audio(audio_path)
+            transcript_data = self._save_transcript(video_id, segments)
 
-        # Compress transcript
-        compressed_transcript = self.text_compressor.compress_segments(segments)
-        
-        # Generate summary (simple approach for now)
-        summary = self._generate_summary(compressed_transcript)
+            # Compress transcript
+            compressed_transcript = self.text_compressor.compress_segments(segments)
+            
+            # Generate summary
+            summary = self.summary_generator.generate_summary(compressed_transcript)
+        except Exception as e:
+            # Update status to error on failure
+            self.metadata[video_id]["status"] = "error"
+            self._save_metadata()
+            logger.error(f"Error processing video {video_id}: {e}")
+            raise
         
         # Update metadata
         self.metadata[video_id].update({
-            "processed": True,
+            "status": "completed",
             "transcript": compressed_transcript,
             "transcript_path": transcript_data["transcript_path"],
             "transcript_metadata_path": transcript_data["metadata_path"],
@@ -118,7 +206,6 @@ class VideoService:
         logger.info(f"Video processing completed for ID: {video_id}")
         
         return {
-            "transcript": compressed_transcript,
             "summary": summary
         }
     
@@ -127,18 +214,22 @@ class VideoService:
         # Extract full text
         full_text = self._extract_full_transcript(segments)
         
+        # Create per-video transcript directory
+        video_transcript_dir = self.transcript_dir / video_id
+        video_transcript_dir.mkdir(parents=True, exist_ok=True)
+
         # Save segments with metadata
-        transcript_path = self.transcript_dir / f"{video_id}_transcript.json"
+        transcript_path = video_transcript_dir / "transcript.json"
         with open(transcript_path, 'w', encoding='utf-8') as f:
             json.dump(segments, f, ensure_ascii=False, indent=2)
         
         # Save plain text
-        text_path = self.transcript_dir / f"{video_id}_transcript.txt"
+        text_path = video_transcript_dir / "transcript.txt"
         with open(text_path, 'w', encoding='utf-8') as f:
             f.write(full_text)
         
         # Save metadata
-        metadata_path = self.transcript_dir / f"{video_id}_metadata.json"
+        metadata_path = video_transcript_dir / "metadata.json"
         transcript_metadata = {
             "video_id": video_id,
             "created_at": datetime.now().isoformat(),
@@ -177,18 +268,12 @@ class VideoService:
         
         return " ".join(transcript_parts)
     
-    def _generate_summary(self, transcript: str) -> str:
-        """Generate summary from transcript."""
-        # Simple summary for demo purposes
-        words = transcript.split()
-        if len(words) > 50:
-            return " ".join(words[:50]) + "... (summary truncated)"
-        return transcript
-    
-    def get_transcript(self, video_id: str, format: str = "full") -> Optional[str]:
-        """Get video transcript in specified format."""
+    def get_transcript(self, video_id: str, owner_username: str) -> Optional[str]:
+        """Get transcript.txt content for the given video."""
         video_info = self.get_video_info(video_id)
-        if not video_info or not video_info.get("processed"):
+        if not video_info or video_info.get("status") != "completed":
+            return None
+        if video_info.get("owner_username") != owner_username:
             return None
         
         transcript_path = video_info.get("transcript_path")
@@ -196,55 +281,21 @@ class VideoService:
             return None
         
         try:
-            if format == "segments":
-                # Return segments JSON
-                with open(transcript_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            elif format == "text":
-                # Return plain text
-                text_path = Path(transcript_path).parent / f"{video_id}_transcript.txt"
-                if text_path.exists():
-                    with open(text_path, 'r', encoding='utf-8') as f:
-                        return f.read()
-            else:
-                # Return full text (default)
-                return self._extract_full_transcript_from_file(transcript_path)
+            # Always return the plain text transcript stored as transcript.txt
+            parent_dir = Path(transcript_path).parent
+            text_path = parent_dir / "transcript.txt"
+            if text_path.exists():
+                with open(text_path, 'r', encoding='utf-8') as f:
+                    return f.read()
         except Exception as e:
             print(f"Error reading transcript: {e}")
             return None
     
-    def _extract_full_transcript_from_file(self, transcript_path: str) -> str:
-        """Extract full transcript text from saved file."""
-        try:
-            with open(transcript_path, 'r', encoding='utf-8') as f:
-                segments = json.load(f)
-            return self._extract_full_transcript(segments)
-        except Exception as e:
-            print(f"Error extracting transcript from file: {e}")
-            return ""
-    
-    def get_summary(self, video_id: str) -> Optional[str]:
+    def get_summary(self, video_id: str, owner_username: str) -> Optional[str]:
         """Get video summary."""
         video_info = self.get_video_info(video_id)
-        if video_info and video_info.get("processed"):
-            return video_info.get("summary")
+        if video_info and video_info.get("status") == "completed":
+            if video_info.get("owner_username") == owner_username:
+                return video_info.get("summary")
         return None
     
-    def chat_with_video(self, video_id: str, question: str) -> str:
-        """Simple RAG-based chat with video content."""
-        transcript = self.get_transcript(video_id)
-        if not transcript:
-            return "Video has not been processed yet. Please process the video first."
-        
-        # Simple keyword-based response for demo
-        question_lower = question.lower()
-        transcript_lower = transcript.lower()
-        
-        if "what" in question_lower and "about" in question_lower:
-            return f"Based on the video content: {transcript[:200]}..."
-        elif "when" in question_lower:
-            return "The video content doesn't specify exact timing information."
-        elif "who" in question_lower:
-            return "The video content doesn't specify specific people."
-        else:
-            return f"Based on the video transcript: {transcript[:150]}... This is a simplified response. In a full implementation, this would use proper RAG with vector embeddings and semantic search."

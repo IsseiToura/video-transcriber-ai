@@ -1,74 +1,103 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Play, Sparkles, Zap, FileText } from "lucide-react";
-import type { Video } from "../types";
+import type { VideoInfo } from "../types/video";
 import VideoDetail from "./VideoDetail";
 import { VideoService } from "../services";
 import { useAuth } from "../contexts/AuthContext";
+import toast from "react-hot-toast";
 
 interface VideoProcessProps {
-  video: Video;
-  onGenerateTranscript: (videoId: string) => void;
+  video: VideoInfo;
 }
 
-const VideoProcess = ({ video, onGenerateTranscript }: VideoProcessProps) => {
+const VideoProcess = ({ video }: VideoProcessProps) => {
   const { user } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isCompleted, setIsCompleted] = useState(false);
-  const [processedVideo, setProcessedVideo] = useState<Video | null>(null);
+  const [isCompleted, setIsCompleted] = useState(video.status === "completed");
+  const [processedVideo, setProcessedVideo] = useState<VideoInfo | null>(
+    video.status === "completed" ? video : null
+  );
+
+  useEffect(() => {
+    const completed = video.status === "completed";
+    setIsProcessing(false);
+    setIsCompleted(completed);
+    setProcessedVideo(completed ? video : null);
+  }, [video.video_id, video.status]);
 
   const handleStartProcess = async () => {
     if (!user?.access_token) {
       console.error("No authentication token available");
+      toast.error("Authentication required");
       return;
     }
 
     setIsProcessing(true);
+    toast.loading("Starting video processing...");
 
     try {
-      // トランスクリプト生成を開始
-      await onGenerateTranscript(video.id);
-
-      // 実際のビデオ処理を開始
-      await processVideo(video.id, user.access_token);
+      await processVideo(video.video_id, user.access_token);
     } catch (error) {
       console.error("Processing error:", error);
       setIsProcessing(false);
+      toast.dismiss();
+      toast.error("Failed to start processing");
     }
   };
 
   const processVideo = async (videoId: string, token: string) => {
     try {
       const videoService = new VideoService();
-      await videoService.processVideo(videoId, token);
+      const processResponse = await videoService.processVideo(videoId, token);
 
-      const completedVideo: Video = {
-        id: videoId,
-        name: video.name,
-        url: video.url,
-        uploadedAt: video.uploadedAt,
-        status: "completed" as const,
-        transcript:
-          "This is a sample transcript of the video content. It contains all the spoken words and can be used for analysis and search purposes.",
-        summary:
-          "This video provides an overview of the topic with detailed explanations and practical examples. The content is well-structured and informative for viewers.",
-      };
+      if (processResponse.status === "completed") {
+        try {
+          const videoInfo = await videoService.getVideoInfo(videoId, token);
+          setProcessedVideo(videoInfo);
+        } catch (infoError) {
+          console.error("Failed to get video info:", infoError);
+          const completedVideo: VideoInfo = {
+            video_id: videoId,
+            filename: video.filename,
+            created_at: video.created_at,
+            status: "completed" as const,
+            transcript: "Transcript processing completed",
+            summary: "Summary processing completed",
+          };
+          setProcessedVideo(completedVideo);
+        }
+      } else if (processResponse.status === "error") {
+        throw new Error(processResponse.message || "Processing failed");
+      } else {
+        const processingVideo: VideoInfo = {
+          video_id: videoId,
+          filename: video.filename,
+          created_at: video.created_at,
+          status: processResponse.status as VideoInfo["status"],
+          transcript: undefined,
+          summary: undefined,
+        };
+        setProcessedVideo(processingVideo);
+      }
 
-      setProcessedVideo(completedVideo);
       setIsProcessing(false);
       setIsCompleted(true);
+
+      // Dismiss loading toast and show success toast
+      toast.dismiss();
+      toast.success("Video processing completed successfully!");
     } catch (error) {
       console.error("Processing error:", error);
       setIsProcessing(false);
+
+      // Dismiss loading toast and show error toast
+      toast.dismiss();
+      toast.error("Video processing failed");
     }
   };
 
   if (isCompleted && processedVideo) {
-    return (
-      <VideoDetail
-        video={processedVideo}
-        onGenerateTranscript={onGenerateTranscript}
-      />
-    );
+    return <VideoDetail video={processedVideo} />;
   }
 
   return (
@@ -83,10 +112,10 @@ const VideoProcess = ({ video, onGenerateTranscript }: VideoProcessProps) => {
           </div>
           <div className="flex-1 text-center sm:text-left">
             <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-2">
-              {video.name}
+              {video.filename}
             </h1>
             <p className="text-sm sm:text-base lg:text-lg text-gray-500">
-              Uploaded {video.uploadedAt.toLocaleDateString()}
+              Uploaded {new Date(video.created_at).toLocaleDateString()}
             </p>
             <div className="flex justify-center sm:justify-start mt-3">
               <span className="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 border border-blue-200">

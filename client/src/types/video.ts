@@ -10,34 +10,14 @@ export interface VideoInfo {
   filename: string;
   summary?: string;
   transcript?: string;
-  created_at: string; // ISO string format from server
-  processed: boolean;
+  created_at: string;
+  status: "uploading" | "uploaded" | "processing" | "completed" | "error";
 }
 
 export interface ProcessResponse {
   message: string;
   video_id: string;
   status: string;
-}
-
-export interface ChatRequest {
-  question: string;
-}
-
-export interface ChatResponse {
-  answer: string;
-  sources?: any; // In a full implementation, this would include source references
-}
-
-// Additional types for video management
-export interface Video {
-  id: string;
-  name: string;
-  url: string;
-  uploadedAt: Date;
-  status: "uploading" | "uploaded" | "processing" | "completed" | "error";
-  transcript?: string;
-  summary?: string;
 }
 
 export const VIDEO_STATUS = {

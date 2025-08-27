@@ -3,8 +3,6 @@ Authentication schemas.
 """
 
 from pydantic import BaseModel
-from typing import Optional
-
 
 class LoginRequest(BaseModel):
     """Login request schema."""

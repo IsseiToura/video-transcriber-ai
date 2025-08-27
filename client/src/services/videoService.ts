@@ -1,11 +1,5 @@
 import { API_CONFIG, apiRequestWithAuth } from "../config/api";
-import type {
-  VideoUploadResponse,
-  ProcessResponse,
-  VideoInfo,
-  ChatRequest,
-  ChatResponse,
-} from "../types";
+import type { VideoInfo, VideoUploadResponse, ProcessResponse } from "../types";
 
 export class VideoService {
   /**
@@ -54,6 +48,25 @@ export class VideoService {
   }
 
   /**
+   * Get all videos
+   */
+  async getAllVideos(token: string): Promise<VideoInfo[]> {
+    const response = await apiRequestWithAuth(
+      API_CONFIG.ENDPOINTS.VIDEOS.LIST,
+      token,
+      {
+        method: "GET",
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to get videos: ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
+  /**
    * Get video or audio file information
    */
   async getVideoInfo(videoId: string, token: string): Promise<VideoInfo> {
@@ -88,8 +101,7 @@ export class VideoService {
       throw new Error(`Failed to get transcript: ${response.statusText}`);
     }
 
-    const data = await response.json();
-    return data.transcript;
+    return response.text();
   }
 
   /**
@@ -113,26 +125,21 @@ export class VideoService {
   }
 
   /**
-   * Chat with video or audio file
+   * Delete a video or audio file and its artifacts
    */
-  async chatWithVideo(
-    videoId: string,
-    question: string,
-    token: string
-  ): Promise<ChatResponse> {
+  async deleteVideo(videoId: string, token: string): Promise<void> {
     const response = await apiRequestWithAuth(
-      API_CONFIG.ENDPOINTS.VIDEOS.CHAT(videoId),
+      API_CONFIG.ENDPOINTS.VIDEOS.DETAIL(videoId),
       token,
       {
-        method: "POST",
-        body: JSON.stringify({ question }),
+        method: "DELETE",
       }
     );
 
-    if (!response.ok) {
-      throw new Error(`Chat request failed: ${response.statusText}`);
+    if (response.status === 204 || response.ok) {
+      return;
     }
 
-    return response.json();
+    throw new Error(`Failed to delete video: ${response.statusText}`);
   }
 }
