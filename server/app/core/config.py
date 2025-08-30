@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     LOG_FORMAT: str = Field(..., env="LOG_FORMAT")
     
     # CORS
-    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8080"]
+    ALLOWED_ORIGINS: List[str] = Field(..., env="ALLOWED_ORIGINS")
     
     @field_validator("ALLOWED_VIDEO_EXTENSIONS", mode="before")
     @classmethod
