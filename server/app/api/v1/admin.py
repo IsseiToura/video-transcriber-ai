@@ -1,58 +1,47 @@
 """
 Admin endpoints for user management.
+Note: Admin functionality with Cognito requires AWS Cognito Admin APIs.
+This is a simplified version for demonstration.
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends
-from typing import List
-from app.core.security import get_all_users, get_user_role, verify_token
+from fastapi import APIRouter, Depends
+from typing import List, Dict, Any
+from app.core.dependencies import require_admin_user
 from app.schemas.auth import UserInfo
 
 router = APIRouter()
 
-def get_current_user_role(token: str = Depends(verify_token)) -> str:
-    """Get current user's role from JWT token."""
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    username = token.get("username")
-    if not username:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    user_role = get_user_role(username)
-    if not user_role:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    return user_role
-
 @router.get("/users", response_model=List[UserInfo], tags=["admin"])
-async def get_users(current_user_role: str = Depends(get_current_user_role)):
+async def get_users(current_user: Dict[str, Any] = Depends(require_admin_user)):
     """
     Get all users information.
     Only admin users can access this endpoint.
+    
+    Note: This is a simplified implementation. In a real application,
+    you would need to use AWS Cognito Admin APIs to list users.
     """
-    if current_user_role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin users can access this endpoint"
+    # For demonstration purposes, return current user info
+    # In a real implementation, you would call Cognito Admin APIs
+    return [
+        UserInfo(
+            username=current_user.get("username"),
+            email=current_user.get("email"),
+            email_verified=current_user.get("email_verified", False),
+            cognito_groups=current_user.get("cognito_groups", [])
         )
-    
-    users = get_all_users(current_user_role)
-    if users is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied"
-        )
-    
-    return users
+    ]
+
+@router.get("/admin-info", tags=["admin"])
+async def get_admin_info(current_user: Dict[str, Any] = Depends(require_admin_user)):
+    """
+    Get admin user information.
+    Only admin users can access this endpoint.
+    """
+    return {
+        "message": "Admin access granted",
+        "user": {
+            "username": current_user.get("username"),
+            "email": current_user.get("email"),
+            "groups": current_user.get("cognito_groups", [])
+        }
+    }

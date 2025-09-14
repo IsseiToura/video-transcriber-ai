@@ -3,6 +3,8 @@ export interface VideoUploadResponse {
   video_id: string;
   filename: string;
   message: string;
+  s3_key?: string;
+  s3_bucket?: string;
 }
 
 export interface VideoInfo {
@@ -12,12 +14,28 @@ export interface VideoInfo {
   transcript?: string;
   created_at: string;
   status: "uploading" | "uploaded" | "processing" | "completed" | "error";
+  file_type?: string;
+  s3_key?: string;
+  s3_bucket?: string;
 }
 
 export interface ProcessResponse {
   message: string;
   video_id: string;
   status: string;
+  summary: string;
+}
+
+export interface PresignedUrlResponse {
+  uploadUrl: string;
+  fileId: string;
+  s3Key: string;
+}
+
+export interface VideoMetadataRequest {
+  fileId: string;
+  filename: string;
+  s3Key: string;
 }
 
 export const VIDEO_STATUS = {
@@ -32,7 +50,7 @@ export const VIDEO_STATUS_LABELS = {
   [VIDEO_STATUS.UPLOADING]: "Uploading",
   [VIDEO_STATUS.UPLOADED]: "Uploaded",
   [VIDEO_STATUS.PROCESSING]: "Processing",
-  [VIDEO_STATUS.COMPLETED]: "Ready",
+  [VIDEO_STATUS.COMPLETED]: "Completed",
   [VIDEO_STATUS.ERROR]: "Error",
 } as const;
 

@@ -3,17 +3,17 @@ Video processing service.
 """
 
 import json
-import shutil
-import uuid
 import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional, List
-import os
+import boto3
 from .audio_processor import AudioProcessor
 from app.core.config import get_settings
 from .text_compressor import TextCompressor
 from .summary_generator import SummaryGenerator
+from app.repositories.video_repository import VideoRepository
+from .cache_service import cache_service
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -26,80 +26,93 @@ class VideoService:
     def __init__(self):
         self.videos_dir = Path(settings.UPLOAD_DIR) / "videos"
         self.videos_dir.mkdir(parents=True, exist_ok=True)
-        self.transcript_dir = Path(settings.UPLOAD_DIR) / "transcripts"
-        self.transcript_dir.mkdir(parents=True, exist_ok=True)
-        self.metadata_file = self.videos_dir / "metadata.json"
         self.audio_processor = AudioProcessor()
         self.text_compressor = TextCompressor()
         self.summary_generator = SummaryGenerator()
-        self._load_metadata()
+        self.s3_client = boto3.client("s3", region_name=settings.AWS_REGION)
+        self.s3_bucket = settings.S3_BUCKET
+        # DynamoDB repository
+        self.video_repo = VideoRepository()
     
-    def _load_metadata(self):
-        """Load video metadata from file."""
-        if self.metadata_file.exists():
-            with open(self.metadata_file, 'r') as f:
-                self.metadata = json.load(f)
-        else:
-            self.metadata = {}
-            self._save_metadata()
-    
-    def _save_metadata(self):
-        """Save video metadata to file."""
-        with open(self.metadata_file, 'w') as f:
-            json.dump(self.metadata, f, indent=2, default=str)
-    
-    def save_video(self, file_content: bytes, filename: str, owner_username: str) -> str:
-        """Save uploaded video or audio file and record owner."""
-        file_id = str(uuid.uuid4())
-        file_path = self.videos_dir / f"{file_id}_{filename}"
-        
-        with open(file_path, 'wb') as f:
-            f.write(file_content)
-        
+    def save_video_metadata(self, file_id: str, filename: str, s3_key: str, owner_username: str) -> str:
+        """Save video metadata after S3 upload."""
         # Determine file type
         file_extension = filename.split(".")[-1].lower()
         is_audio = file_extension in ["mp3", "wav", "aac", "ogg", "flac", "m4a", "wma"]
         
-        # Save metadata
-        self.metadata[file_id] = {
-            "filename": filename,
-            "file_path": str(file_path),
-            "file_type": "audio" if is_audio else "video",
-            "created_at": datetime.now().isoformat(),
-            "status": "uploading",
-            "owner_username": owner_username,
-        }
-        self._save_metadata()
+        # Save metadata to DynamoDB
+        self.video_repo.save_metadata(
+            video_id=file_id,
+            filename=filename,
+            s3_key=s3_key,
+            s3_bucket=self.s3_bucket,
+            file_type="audio" if is_audio else "video",
+            owner_username=owner_username,
+            status="uploaded",
+        )
         
-        # Update status to uploaded after successful save
-        self.metadata[file_id]["status"] = "uploaded"
-        self._save_metadata()
+        # Invalidate cache for this video
+        if cache_service.is_available():
+            cache_service.invalidate_video_info(file_id, owner_username)
+            logger.debug(f"Invalidated cache for new video {file_id}")
         
         return file_id
     
-    def get_video_info(self, video_id: str) -> Optional[Dict]:
-        """Get video or audio file information."""
-        return self.metadata.get(video_id)
+    def get_video_info(self, video_id: str, owner_username: str) -> Optional[Dict]:
+        """Get video or audio file information with caching."""
+        # Try to get from cache first
+        if cache_service.is_available():
+            cache_key = cache_service.get_video_info_key(video_id, owner_username)
+            cached_data = cache_service.get(cache_key)
+            if cached_data:
+                logger.debug(f"Cache hit for video {video_id}")
+                # Handle cached data format (Python dict string representation with function calls)
+                if isinstance(cached_data, bytes):
+                    try:
+                        # Try pickle decode first (for data with function calls like Decimal)
+                        import pickle
+                        cached_data = pickle.loads(cached_data)
+                    except (pickle.PickleError, UnicodeDecodeError):
+                        try:
+                            # Fallback to eval for Python dict string representation
+                            data_str = cached_data.decode('utf-8')
+                            # Use eval with restricted globals and Decimal support
+                            from decimal import Decimal
+                            safe_globals = {"__builtins__": {}, "Decimal": Decimal}
+                            cached_data = eval(data_str, safe_globals, {})
+                        except Exception as e:
+                            logger.warning(f"Failed to decode cached data for video {video_id}: {e}")
+                            cached_data = None
+                elif isinstance(cached_data, str):
+                    try:
+                        # Use eval with restricted globals and Decimal support
+                        from decimal import Decimal
+                        safe_globals = {"__builtins__": {}, "Decimal": Decimal}
+                        cached_data = eval(cached_data, safe_globals, {})
+                    except Exception as e:
+                        logger.warning(f"Failed to decode cached string data for video {video_id}: {e}")
+                        cached_data = None
+                return cached_data
+        
+        # If not in cache, get from database
+        video_info = self.video_repo.get(video_id, owner_username)
+        
+        # Cache the result if available
+        if video_info and cache_service.is_available():
+            cache_key = cache_service.get_video_info_key(video_id, owner_username)
+            cache_service.set(cache_key, video_info)
+            logger.debug(f"Cached video info for {video_id}")
+        
+        return video_info
     
     def get_all_videos(self, owner_username: str) -> List[Dict]:
         """Get all videos for a specific owner."""
-        videos = []
-        for video_id, video_info in self.metadata.items():
-            if video_info.get("owner_username") != owner_username:
-                continue
-            videos.append({
-                "video_id": video_id,
-                "filename": video_info["filename"],
-                "summary": video_info.get("summary"),
-                "transcript": video_info.get("transcript"),
-                "created_at": video_info["created_at"],
-                "status": video_info.get("status", "uploaded")
-            })
-        return videos
+        resp = self.video_repo.list_by_owner(owner_username)
+        return resp.get("items", [])
 
     def _assert_ownership(self, video_id: str, owner_username: str) -> bool:
         """Return True if the given user owns the video_id."""
-        info = self.metadata.get(video_id)
+        info = self.video_repo.get(video_id, owner_username)
         if not info:
             return False
         return info.get("owner_username") == owner_username
@@ -109,63 +122,73 @@ class VideoService:
         
         Returns True if the video existed and was removed, else False.
         """
-        info = self.metadata.get(video_id)
+        info = self.video_repo.get(video_id, owner_username)
         if not info:
             return False
         if info.get("owner_username") != owner_username:
             # Do not allow deleting others' videos
             return False
         
-        for key in ["file_path", "audio_path", "transcript_path", "transcript_metadata_path"]:
-            path_str = info.get(key)
-            if not path_str:
-                continue
-            path = Path(path_str)
+        # Delete S3 file if it exists
+        s3_key = info.get("s3_key")
+        if s3_key:
             try:
-                if path.exists() and path.is_file():
-                    path.unlink()
+                self.s3_client.delete_object(Bucket=self.s3_bucket, Key=s3_key)
             except Exception:
                 # Keep deletion best-effort; do not raise
                 pass
-
-        # Also attempt to remove the per-video transcript directory if present (new structure only)
-        tp = info.get("transcript_path")
-        if tp:
+        
+        # Delete transcript artifacts from S3 if present
+        for tk in [
+            info.get("transcript_s3_key"),
+            info.get("transcript_text_s3_key"),
+            info.get("transcript_metadata_s3_key"),
+        ]:
+            if not tk:
+                continue
             try:
-                transcript_dir = Path(tp).parent
-                # Only remove if this is exactly .../transcripts/{video_id}
-                if (
-                    transcript_dir.exists()
-                    and transcript_dir.is_dir()
-                    and transcript_dir.parent == self.transcript_dir
-                    and transcript_dir.name == video_id
-                ):
-                    shutil.rmtree(transcript_dir)
+                self.s3_client.delete_object(Bucket=self.s3_bucket, Key=tk)
             except Exception:
                 pass
         
-        self.metadata.pop(video_id, None)
-        self._save_metadata()
+        self.video_repo.delete(video_id, owner_username)
+        
+        # Invalidate cache when video is deleted
+        if cache_service.is_available():
+            cache_service.invalidate_video_info(video_id, owner_username)
+            logger.debug(f"Invalidated cache for deleted video {video_id}")
+        
         return True
     
     def process_video(self, video_id: str, owner_username: str) -> Dict:
         """Process video or audio: extract audio, transcribe, summarize."""
         logger.info(f"Starting video processing for ID: {video_id}")
         
-        if video_id not in self.metadata:
+        current = self.video_repo.get(video_id, owner_username)
+        if not current:
             raise ValueError("File not found")
         if not self._assert_ownership(video_id, owner_username):
             raise ValueError("Not allowed")
         
-        file_info = self.metadata[video_id]
-        file_path = Path(file_info["file_path"])
+        file_info = current
         
-        if not file_path.exists():
-            raise ValueError("File not found")
+        # Download file from S3
+        if "s3_key" not in file_info or not file_info["s3_key"]:
+            raise ValueError("S3 key not found for this file")
+        s3_key = file_info["s3_key"]
+        file_path = self.videos_dir / f"{video_id}_{file_info['filename']}"
+        try:
+            self.s3_client.download_file(self.s3_bucket, s3_key, str(file_path))
+        except Exception as e:
+            raise ValueError(f"Failed to download file from S3: {str(e)}")
         
         # Update status to processing
-        self.metadata[video_id]["status"] = "processing"
-        self._save_metadata()
+        self.video_repo.update_fields(video_id, {"status": "processing"}, owner_username)
+        
+        # Invalidate cache when status changes
+        if cache_service.is_available():
+            cache_service.invalidate_video_info(video_id, owner_username)
+            logger.debug(f"Invalidated cache for processing video {video_id}")
         
         try:
             # For audio files, use directly; for video files, extract audio
@@ -187,21 +210,47 @@ class VideoService:
             summary = self.summary_generator.generate_summary(compressed_transcript)
         except Exception as e:
             # Update status to error on failure
-            self.metadata[video_id]["status"] = "error"
-            self._save_metadata()
+            self.video_repo.update_fields(video_id, {"status": "error"}, owner_username)
+            
+            # Invalidate cache when status changes to error
+            if cache_service.is_available():
+                cache_service.invalidate_video_info(video_id, owner_username)
+                logger.debug(f"Invalidated cache for error video {video_id}")
+            
             logger.error(f"Error processing video {video_id}: {e}")
             raise
         
         # Update metadata
-        self.metadata[video_id].update({
-            "status": "completed",
-            "transcript": compressed_transcript,
-            "transcript_path": transcript_data["transcript_path"],
-            "transcript_metadata_path": transcript_data["metadata_path"],
-            "summary": summary,
-            "audio_path": str(audio_path)
-        })
-        self._save_metadata()
+        # Save transcript data to the same video record
+        self.video_repo.save_transcript_data(
+            video_id=video_id,
+            transcript_text=compressed_transcript,
+            summary=summary,
+            segments_count=transcript_data.get("segments_count", 0),
+            total_characters=transcript_data.get("total_characters", 0),
+            total_words=transcript_data.get("total_words", 0),
+            owner_username=owner_username,
+            transcript_s3_key=transcript_data.get("transcript_s3_key"),
+            transcript_text_s3_key=transcript_data.get("text_s3_key"),
+            transcript_metadata_s3_key=transcript_data.get("metadata_s3_key"),
+        )
+        # Mark processing as completed upon successful transcript save
+        self.video_repo.update_fields(video_id, {"status": "completed"}, owner_username)
+        
+        # Invalidate cache when processing completes
+        if cache_service.is_available():
+            cache_service.invalidate_video_info(video_id, owner_username)
+            logger.debug(f"Invalidated cache for completed video {video_id}")
+        
+        # Clean up temporary files downloaded from S3
+        if "s3_key" in file_info:
+            try:
+                if file_path.exists():
+                    file_path.unlink()
+                if audio_path.exists() and audio_path != file_path:
+                    audio_path.unlink()
+            except Exception as e:
+                logger.warning(f"Failed to clean up temporary files: {e}")
         
         logger.info(f"Video processing completed for ID: {video_id}")
         
@@ -210,44 +259,44 @@ class VideoService:
         }
     
     def _save_transcript(self, video_id: str, segments) -> Dict:
-        """Save transcript data to files."""
+        """Save transcript data to S3 (JSON, TXT, and metadata)."""
         # Extract full text
         full_text = self._extract_full_transcript(segments)
-        
-        # Create per-video transcript directory
-        video_transcript_dir = self.transcript_dir / video_id
-        video_transcript_dir.mkdir(parents=True, exist_ok=True)
 
-        # Save segments with metadata
-        transcript_path = video_transcript_dir / "transcript.json"
-        with open(transcript_path, 'w', encoding='utf-8') as f:
-            json.dump(segments, f, ensure_ascii=False, indent=2)
-        
-        # Save plain text
-        text_path = video_transcript_dir / "transcript.txt"
-        with open(text_path, 'w', encoding='utf-8') as f:
-            f.write(full_text)
-        
-        # Save metadata
-        metadata_path = video_transcript_dir / "metadata.json"
+        # Prepare S3 keys
+        base_prefix = f"transcripts/{video_id}"
+        transcript_s3_key = f"{base_prefix}/transcript.json"
+        text_s3_key = f"{base_prefix}/transcript.txt"
+        metadata_s3_key = f"{base_prefix}/metadata.json"
+
+        # Build payloads
+        transcript_json_bytes = json.dumps(segments, ensure_ascii=False, indent=2).encode("utf-8")
+        text_bytes = full_text.encode("utf-8")
         transcript_metadata = {
             "video_id": video_id,
             "created_at": datetime.now().isoformat(),
             "segments_count": len(segments) if isinstance(segments, list) else 0,
             "total_characters": len(full_text),
             "total_words": len(full_text.split()),
-            "transcript_file": str(transcript_path),
-            "text_file": str(text_path)
+            "transcript_s3_key": transcript_s3_key,
+            "text_s3_key": text_s3_key,
         }
-        
-        with open(metadata_path, 'w', encoding='utf-8') as f:
-            json.dump(transcript_metadata, f, ensure_ascii=False, indent=2)
-        
+        metadata_json_bytes = json.dumps(transcript_metadata, ensure_ascii=False, indent=2).encode("utf-8")
+
+        # Upload to S3
+        self.s3_client.put_object(Bucket=self.s3_bucket, Key=transcript_s3_key, Body=transcript_json_bytes, ContentType="application/json; charset=utf-8")
+        self.s3_client.put_object(Bucket=self.s3_bucket, Key=text_s3_key, Body=text_bytes, ContentType="text/plain; charset=utf-8")
+        self.s3_client.put_object(Bucket=self.s3_bucket, Key=metadata_s3_key, Body=metadata_json_bytes, ContentType="application/json; charset=utf-8")
+
+        # Return keys and stats for further saving
         return {
-            "transcript_path": str(transcript_path),
-            "text_path": str(text_path),
-            "metadata_path": str(metadata_path),
-            "full_text": full_text
+            "transcript_s3_key": transcript_s3_key,
+            "text_s3_key": text_s3_key,
+            "metadata_s3_key": metadata_s3_key,
+            "segments_count": transcript_metadata["segments_count"],
+            "total_characters": transcript_metadata["total_characters"],
+            "total_words": transcript_metadata["total_words"],
+            "full_text": full_text,
         }
     
     def _extract_full_transcript(self, segments) -> str:
@@ -270,30 +319,24 @@ class VideoService:
     
     def get_transcript(self, video_id: str, owner_username: str) -> Optional[str]:
         """Get transcript.txt content for the given video."""
-        video_info = self.get_video_info(video_id)
+        video_info = self.get_video_info(video_id, owner_username)
         if not video_info or video_info.get("status") != "completed":
             return None
         if video_info.get("owner_username") != owner_username:
             return None
-        
-        transcript_path = video_info.get("transcript_path")
-        if not transcript_path:
-            return None
-        
+            
         try:
-            # Always return the plain text transcript stored as transcript.txt
-            parent_dir = Path(transcript_path).parent
-            text_path = parent_dir / "transcript.txt"
-            if text_path.exists():
-                with open(text_path, 'r', encoding='utf-8') as f:
-                    return f.read()
-        except Exception as e:
-            print(f"Error reading transcript: {e}")
+            text_key = video_info.get("transcript_text_s3_key")
+            if not text_key:
+                return None
+            obj = self.s3_client.get_object(Bucket=self.s3_bucket, Key=text_key)
+            return obj["Body"].read().decode("utf-8")
+        except Exception:
             return None
     
     def get_summary(self, video_id: str, owner_username: str) -> Optional[str]:
         """Get video summary."""
-        video_info = self.get_video_info(video_id)
+        video_info = self.get_video_info(video_id, owner_username)
         if video_info and video_info.get("status") == "completed":
             if video_info.get("owner_username") == owner_username:
                 return video_info.get("summary")

@@ -3,7 +3,7 @@ API router for v1 endpoints.
 """
 
 from fastapi import APIRouter
-from app.api.v1 import auth, videos, admin
+from app.api.v1 import auth, videos, admin, config
 
 api_router = APIRouter()
 
@@ -11,3 +11,4 @@ api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["authentication"])
 api_router.include_router(videos.router, prefix="/videos", tags=["videos"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
+api_router.include_router(config.router, prefix="/config", tags=["configuration"])

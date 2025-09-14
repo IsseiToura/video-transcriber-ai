@@ -1,12 +1,33 @@
 import { useAuth } from "./contexts/AuthContext";
 import { useVideos } from "./hooks/useVideos";
 import { useVideoSelection } from "./hooks/useVideoSelection";
-import { Header, Sidebar, MainContent, Footer, Login } from "./layouts";
+import {
+  Header,
+  Sidebar,
+  MainContent,
+  Footer,
+  SignIn,
+  SignUp,
+  EmailConfirmation,
+} from "./layouts";
 import type { VideoInfo } from "./types/video";
 import { Toaster } from "react-hot-toast";
 
 function App() {
-  const { user, logout, isLoading } = useAuth();
+  const {
+    user,
+    logout,
+    isLoading,
+    authView,
+    pendingUsername,
+    pendingEmail,
+    checkAuth,
+    handleSignUpSuccess,
+    handleEmailConfirmationSuccess,
+    handleSwitchToSignIn,
+    handleSwitchToSignUp,
+  } = useAuth();
+
   const { videos, addVideo, removeVideo, loading: videosLoading } = useVideos();
   const {
     selectedVideo,
@@ -15,6 +36,10 @@ function App() {
     handleUploadComplete,
     clearSelection,
   } = useVideoSelection();
+
+  const handleSignInSuccess = async () => {
+    await checkAuth();
+  };
 
   // Show loading state
   if (isLoading || videosLoading) {
@@ -28,9 +53,33 @@ function App() {
     );
   }
 
-  // Show login if not authenticated
+  // Show auth screens if not authenticated
   if (!user) {
-    return <Login />;
+    switch (authView) {
+      case "signup":
+        return (
+          <SignUp
+            onSuccess={handleSignUpSuccess}
+            onSwitchToSignIn={handleSwitchToSignIn}
+          />
+        );
+      case "email-confirmation":
+        return (
+          <EmailConfirmation
+            username={pendingUsername}
+            email={pendingEmail}
+            onSuccess={handleEmailConfirmationSuccess}
+            onBack={handleSwitchToSignIn}
+          />
+        );
+      default:
+        return (
+          <SignIn
+            onSuccess={handleSignInSuccess}
+            onSwitchToSignUp={handleSwitchToSignUp}
+          />
+        );
+    }
   }
 
   const handleUploadCompleteWithAdd = (newVideo: VideoInfo) => {

@@ -2,51 +2,34 @@
 Video endpoints.
 """
 
-from fastapi import APIRouter, HTTPException, status, UploadFile, File, Depends, Header
+from fastapi import APIRouter, HTTPException, status, Depends, Query
 from fastapi.responses import PlainTextResponse
 from app.schemas.video import (
-    VideoUploadResponse, VideoInfo, ProcessResponse
+    VideoUploadResponse, VideoInfo, ProcessResponse, PresignedUrlResponse, VideoMetadataRequest
 )
 from typing import List
 from app.services.video_service import VideoService
-from app.core.security import verify_token
+from app.services.s3_presigned_url_service import create_presigned_url
+from app.core.dependencies import get_current_user
 
 router = APIRouter()
 video_service = VideoService()
 
-def get_current_user(authorization: str = Header(None)):
-    """Get current user from JWT token."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    token = authorization.replace("Bearer ", "")
-    user = verify_token(token)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return user
-
-@router.post("/", response_model=VideoUploadResponse)
-async def upload_video(
-    file: UploadFile = File(...),
+@router.get("/presigned-url", response_model=PresignedUrlResponse)
+async def get_presigned_url(
+    filename: str = Query(...),
+    content_type: str = Query(...),
     current_user: dict = Depends(get_current_user)
 ):
-    """Upload video or audio file."""
+    """Generate presigned URL for S3 upload."""
     # Validate file type
-    if not file.filename:
+    if not filename:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No filename provided"
         )
     
-    file_extension = file.filename.split(".")[-1].lower()
+    file_extension = filename.split(".")[-1].lower()
     # Support both video and audio formats
     supported_formats = [
         # Video formats
@@ -60,32 +43,43 @@ async def upload_video(
             detail="Invalid file format. Supported formats: video (mp4, avi, mov, wmv, flv, webm) and audio (mp3, wav, aac, ogg, flac, m4a, wma)"
         )
     
-    # Read file content
     try:
-        content = await file.read()
-        if len(content) == 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Empty file"
-            )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error reading file: {str(e)}"
-        )
-    
-    # Save video
-    try:
-        video_id = video_service.save_video(content, file.filename, current_user["username"])
-        return VideoUploadResponse(
-            video_id=video_id,
-            filename=file.filename,
-            message="Video uploaded successfully"
+        result = create_presigned_url(filename, content_type)
+        return PresignedUrlResponse(
+            uploadUrl=result["uploadUrl"],
+            fileId=result["fileId"],
+            s3Key=result["s3Key"]
         )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error saving video: {str(e)}"
+            detail=f"Error generating presigned URL: {str(e)}"
+        )
+
+@router.post("/metadata", response_model=VideoUploadResponse)
+async def save_video_metadata(
+    metadata: VideoMetadataRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Save video metadata after S3 upload."""
+    try:
+        video_id = video_service.save_video_metadata(
+            metadata.fileId,
+            metadata.filename,
+            metadata.s3Key,
+            current_user["username"]
+        )
+        return VideoUploadResponse(
+            video_id=video_id,
+            filename=metadata.filename,
+            message="Video metadata saved successfully",
+            s3_key=metadata.s3Key,
+            s3_bucket=video_service.s3_bucket
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error saving video metadata: {str(e)}"
         )
 
 @router.get("/", response_model=List[VideoInfo])
@@ -108,7 +102,7 @@ async def get_video_info(
     current_user: dict = Depends(get_current_user)
 ):
     """Get video information."""
-    video_info = video_service.get_video_info(video_id)
+    video_info = video_service.get_video_info(video_id, current_user["username"])
     if not video_info:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -126,7 +120,10 @@ async def get_video_info(
         summary=video_info.get("summary"),
         transcript=video_info.get("transcript"),
         created_at=video_info["created_at"],
-        status=video_info.get("status", "uploaded")
+        status=video_info.get("status", "uploaded"),
+        file_type=video_info.get("file_type"),
+        s3_key=video_info.get("s3_key"),
+        s3_bucket=video_info.get("s3_bucket")
     )
 
 @router.delete("/{video_id}", status_code=status.HTTP_204_NO_CONTENT)

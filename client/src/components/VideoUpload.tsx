@@ -61,10 +61,20 @@ const VideoUpload = ({ onUploadComplete }: VideoUploadProps) => {
       status: "uploading",
     };
 
+    // Show initial uploading toast
+    const uploadingToast = toast.loading("Starting upload...");
+
     try {
-      // Use VideoService for upload
+      // Use VideoService for upload with progress callback
       const videoService = new VideoService();
-      const result = await videoService.uploadVideo(file, user.access_token);
+      const result = await videoService.uploadVideo(
+        file,
+        user.access_token,
+        (stage: string) => {
+          // Update the loading toast with current stage
+          toast.loading(stage, { id: uploadingToast });
+        }
+      );
 
       // Update video with server response - mark as uploaded
       const uploadedVideo = {
@@ -77,11 +87,14 @@ const VideoUpload = ({ onUploadComplete }: VideoUploadProps) => {
       onUploadComplete(uploadedVideo);
 
       // Dismiss loading toast and show success toast
+      toast.dismiss(uploadingToast);
       toast.success(
         "Video uploaded successfully! Redirecting to processing..."
       );
     } catch (error) {
       console.error("Upload error:", error);
+      // Dismiss loading toast and show error toast
+      toast.dismiss(uploadingToast);
       toast.error(
         `Upload failed: ${
           error instanceof Error ? error.message : "Unknown error"

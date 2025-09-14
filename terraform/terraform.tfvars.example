@@ -1,0 +1,21 @@
+# Video Transcriber AI - Terraform Variables Example
+# Copy this file to terraform.tfvars and update the values
+
+# AWS Configuration
+aws_region = "ap-southeast-2"
+environment = "dev"
+qut_username = "n11690216@qut.edu.au"
+
+# CORS Configuration
+allowed_origins = [
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "http://localhost:8000"
+]
+
+# AI Configuration
+openai_model = "gpt-4o-mini"
+
+# ElastiCache Configuration
+elasticache_node_type = "cache.t3.micro"
+elasticache_num_cache_nodes = 1

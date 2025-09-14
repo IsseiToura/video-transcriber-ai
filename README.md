@@ -57,6 +57,11 @@ VideoTransraper/
 - **Styling**: Tailwind CSS
 - **State Management**: React Context API
 - **Icons**: Lucide React
+- **Backend**: FastAPI + Python
+- **Database**: DynamoDB
+- **Storage**: AWS S3
+- **Cache**: AWS ElastiCache Memcached
+- **Authentication**: AWS Cognito
 
 ## Getting Started
 
@@ -64,6 +69,31 @@ VideoTransraper/
 
 - Node.js 16+
 - npm or yarn
+- Python 3.8+
+- AWS Account with ElastiCache, DynamoDB, S3, and Cognito access
+
+### Environment Configuration
+
+The application requires the following environment variables to be configured:
+
+#### AWS Services
+
+- `AWS_REGION`: AWS region (default: ap-southeast-2)
+- `S3_BUCKET`: S3 bucket name for video storage
+- `DDB_VIDEOS_TABLE`: DynamoDB table name for video metadata
+- `COGNITO_USER_POOL_ID`: AWS Cognito User Pool ID
+- `COGNITO_APP_CLIENT_ID`: AWS Cognito App Client ID
+
+#### ElastiCache Memcached
+
+- `ELASTICACHE_MEMCACHED_ENDPOINT`: ElastiCache cluster endpoint
+- `ELASTICACHE_MEMCACHED_TTL`: Cache TTL in seconds (default: 3600)
+
+#### AI Services
+
+- `OPENAI_API_KEY`: OpenAI API key for AI features
+
+Copy `server/env.example` to `server/.env` and configure the values for your environment.
 
 ### Frontend Setup
 

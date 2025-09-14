@@ -1,13 +1,24 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import type { ReactNode } from "react";
-import { AuthService } from "../services";
-import type { LoginRequest, User } from "../types";
+import { cognitoService, cognitoApiService } from "../services";
+import type { User } from "../types/auth";
+
+type AuthView = "signin" | "signup" | "email-confirmation";
 
 interface AuthContextType {
   user: User | null;
-  login: (loginRequest: LoginRequest) => Promise<boolean>;
-  logout: () => void;
+  isAuthenticated: boolean;
   isLoading: boolean;
+  authView: AuthView;
+  pendingUsername: string;
+  pendingEmail: string;
+  checkAuth: () => Promise<void>;
+  logout: () => Promise<void>;
+  setAuthView: (view: AuthView) => void;
+  handleSignUpSuccess: (username: string, email: string) => void;
+  handleEmailConfirmationSuccess: () => Promise<void>;
+  handleSwitchToSignIn: () => void;
+  handleSwitchToSignUp: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,68 +38,89 @@ interface AuthProviderProps {
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [authView, setAuthView] = useState<AuthView>("signin");
+  const [pendingUsername, setPendingUsername] = useState<string>("");
+  const [pendingEmail, setPendingEmail] = useState<string>("");
 
-  useEffect(() => {
-    // Check if user is logged in on app start
-    const savedUser = localStorage.getItem("user");
-    const savedToken = localStorage.getItem("access_token");
-
-    if (savedUser && savedToken) {
-      try {
-        const userData = JSON.parse(savedUser);
-        const user: User = {
-          ...userData,
-          access_token: savedToken,
-        };
-        setUser(user);
-      } catch (error) {
-        localStorage.removeItem("user");
-        localStorage.removeItem("access_token");
-      }
-    }
-    setIsLoading(false);
-  }, []);
-
-  const login = async (loginRequest: LoginRequest): Promise<boolean> => {
+  const checkAuth = async () => {
     setIsLoading(true);
-
     try {
-      // Use AuthService for authentication
-      const authService = new AuthService();
-      const authData = await authService.login(loginRequest);
+      const isAuth = await cognitoApiService.isAuthenticated();
+      if (isAuth) {
+        const cognitoUser = await cognitoService.getCurrentUser();
+        const tokens = await cognitoService.getCurrentUserTokens();
 
-      const user: User = {
-        id: authData.user_id,
-        username: authData.username,
-        access_token: authData.access_token,
-      };
-
-      setUser(user);
-      localStorage.setItem(
-        "user",
-        JSON.stringify({ id: user.id, username: user.username })
-      );
-      localStorage.setItem("access_token", user.access_token);
-      return true;
+        if (cognitoUser && tokens) {
+          const user: User = {
+            id: cognitoUser.userId,
+            username: cognitoUser.username,
+            email: cognitoUser.email,
+            emailVerified: cognitoUser.emailVerified,
+            access_token: tokens.accessToken,
+            groups: cognitoUser.groups,
+          };
+          setUser(user);
+        }
+      } else {
+        setUser(null);
+      }
     } catch (error) {
-      console.error("Login error:", error);
-      return false;
+      console.error("Auth check error:", error);
+      setUser(null);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem("user");
-    localStorage.removeItem("access_token");
+  const logout = async () => {
+    setIsLoading(true);
+    try {
+      await cognitoService.signOut();
+      setUser(null);
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  // Auth flow handlers
+  const handleSignUpSuccess = (username: string, email: string) => {
+    setPendingUsername(username);
+    setPendingEmail(email);
+    setAuthView("email-confirmation");
+  };
+
+  const handleEmailConfirmationSuccess = async () => {
+    await checkAuth();
+  };
+
+  const handleSwitchToSignIn = () => {
+    setAuthView("signin");
+  };
+
+  const handleSwitchToSignUp = () => {
+    setAuthView("signup");
+  };
+
+  useEffect(() => {
+    checkAuth();
+  }, []);
 
   const value = {
     user,
-    login,
-    logout,
+    isAuthenticated: !!user,
     isLoading,
+    authView,
+    pendingUsername,
+    pendingEmail,
+    checkAuth,
+    logout,
+    setAuthView,
+    handleSignUpSuccess,
+    handleEmailConfirmationSuccess,
+    handleSwitchToSignIn,
+    handleSwitchToSignUp,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

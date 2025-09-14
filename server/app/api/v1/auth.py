@@ -1,26 +1,43 @@
 """
 Authentication endpoints.
+These endpoints provide user information and token validation.
 """
 
-from fastapi import APIRouter, HTTPException, status
-from app.schemas.auth import LoginRequest, LoginResponse
-from app.core.security import authenticate_user, create_access_token
+from fastapi import APIRouter, Depends
+from app.schemas.auth import UserInfo, TokenValidationResponse
+from app.core.dependencies import get_current_user, get_current_user_optional
+from typing import Dict, Any
 
 router = APIRouter()
 
-@router.post("/login", response_model=LoginResponse)
-async def login(login_data: LoginRequest):
-    """Login endpoint with hardcoded credentials."""
-    user = authenticate_user(login_data.username, login_data.password)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    access_token = create_access_token(data={"sub": user["username"]})
-    return LoginResponse(
-        access_token=access_token,
-        username=user["username"],
+@router.get("/me", response_model=UserInfo)
+async def get_current_user_info(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Get current authenticated user information.
+    Requires valid Cognito JWT token.
+    """
+    return UserInfo(
+        username=current_user.get("username"),
+        email=current_user.get("email"),
+        email_verified=current_user.get("email_verified", False),
+        cognito_groups=current_user.get("cognito_groups", [])
     )
+
+@router.get("/validate-token", response_model=TokenValidationResponse)
+async def validate_token(current_user: Dict[str, Any] = Depends(get_current_user_optional)):
+    """
+    Validate JWT token.
+    Returns user information if token is valid, None if not authenticated.
+    """
+    if current_user:
+        return TokenValidationResponse(
+            valid=True,
+            user_info=UserInfo(
+                username=current_user.get("username"),
+                email=current_user.get("email"),
+                email_verified=current_user.get("email_verified", False),
+                cognito_groups=current_user.get("cognito_groups", [])
+            )
+        )
+    else:
+        return TokenValidationResponse(valid=False, user_info=None)

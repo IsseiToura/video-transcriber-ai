@@ -1,31 +1,71 @@
-import { API_CONFIG, apiRequestWithAuth } from "../config/api";
-import type { VideoInfo, VideoUploadResponse, ProcessResponse } from "../types";
+import { API_ENDPOINTS, apiRequestWithAuth } from "../config/api";
+import type {
+  VideoInfo,
+  VideoUploadResponse,
+  ProcessResponse,
+  PresignedUrlResponse,
+  VideoMetadataRequest,
+} from "../types";
 
 export class VideoService {
   /**
    * Upload video or audio file
    */
-  async uploadVideo(file: File, token: string): Promise<VideoUploadResponse> {
-    const formData = new FormData();
-    formData.append("file", file);
+  async uploadVideo(
+    file: File,
+    token: string,
+    onProgress?: (stage: string) => void
+  ): Promise<VideoUploadResponse> {
+    const presignResponse = await apiRequestWithAuth(
+      `${API_ENDPOINTS.VIDEOS.PRESIGNED}?filename=${encodeURIComponent(
+        file.name
+      )}&content_type=${encodeURIComponent(file.type)}`,
+      token,
+      { method: "GET" }
+    );
 
-    const response = await apiRequestWithAuth(
-      API_CONFIG.ENDPOINTS.VIDEOS.UPLOAD,
+    if (!presignResponse.ok) {
+      throw new Error(
+        `Failed to get presigned URL: ${presignResponse.statusText}`
+      );
+    }
+
+    const { uploadUrl, fileId, s3Key }: PresignedUrlResponse =
+      (await presignResponse.json()) as PresignedUrlResponse;
+
+    // Upload file to S3 using presigned URL
+    onProgress?.("Uploading file...");
+    const uploadResponse = await fetch(uploadUrl, {
+      method: "PUT",
+      body: file,
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error(`S3 upload failed: ${uploadResponse.statusText}`);
+    }
+
+    const metadataResponse = await apiRequestWithAuth(
+      API_ENDPOINTS.VIDEOS.METADATA,
       token,
       {
         method: "POST",
-        body: formData,
-        headers: {
-          // Content-Type is automatically set for FormData
-        },
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileId,
+          filename: file.name,
+          s3Key,
+        } as VideoMetadataRequest),
       }
     );
 
-    if (!response.ok) {
-      throw new Error(`Upload failed: ${response.statusText}`);
+    if (!metadataResponse.ok) {
+      throw new Error(
+        `Failed to save metadata: ${metadataResponse.statusText}`
+      );
     }
 
-    return response.json();
+    onProgress?.("Upload completed!");
+    return metadataResponse.json() as Promise<VideoUploadResponse>;
   }
 
   /**
@@ -33,7 +73,7 @@ export class VideoService {
    */
   async processVideo(videoId: string, token: string): Promise<ProcessResponse> {
     const response = await apiRequestWithAuth(
-      API_CONFIG.ENDPOINTS.VIDEOS.PROCESS(videoId),
+      API_ENDPOINTS.VIDEOS.PROCESS(videoId),
       token,
       {
         method: "POST",
@@ -44,7 +84,7 @@ export class VideoService {
       throw new Error(`Processing failed: ${response.statusText}`);
     }
 
-    return response.json();
+    return response.json() as Promise<ProcessResponse>;
   }
 
   /**
@@ -52,7 +92,7 @@ export class VideoService {
    */
   async getAllVideos(token: string): Promise<VideoInfo[]> {
     const response = await apiRequestWithAuth(
-      API_CONFIG.ENDPOINTS.VIDEOS.LIST,
+      API_ENDPOINTS.VIDEOS.LIST,
       token,
       {
         method: "GET",
@@ -63,7 +103,7 @@ export class VideoService {
       throw new Error(`Failed to get videos: ${response.statusText}`);
     }
 
-    return response.json();
+    return response.json() as Promise<VideoInfo[]>;
   }
 
   /**
@@ -71,7 +111,7 @@ export class VideoService {
    */
   async getVideoInfo(videoId: string, token: string): Promise<VideoInfo> {
     const response = await apiRequestWithAuth(
-      API_CONFIG.ENDPOINTS.VIDEOS.DETAIL(videoId),
+      API_ENDPOINTS.VIDEOS.DETAIL(videoId),
       token,
       {
         method: "GET",
@@ -82,7 +122,7 @@ export class VideoService {
       throw new Error(`Failed to get video info: ${response.statusText}`);
     }
 
-    return response.json();
+    return response.json() as Promise<VideoInfo>;
   }
 
   /**
@@ -90,7 +130,7 @@ export class VideoService {
    */
   async getTranscript(videoId: string, token: string): Promise<string> {
     const response = await apiRequestWithAuth(
-      API_CONFIG.ENDPOINTS.VIDEOS.TRANSCRIPT(videoId),
+      API_ENDPOINTS.VIDEOS.TRANSCRIPT(videoId),
       token,
       {
         method: "GET",
@@ -109,7 +149,7 @@ export class VideoService {
    */
   async getSummary(videoId: string, token: string): Promise<string> {
     const response = await apiRequestWithAuth(
-      API_CONFIG.ENDPOINTS.VIDEOS.SUMMARY(videoId),
+      API_ENDPOINTS.VIDEOS.SUMMARY(videoId),
       token,
       {
         method: "GET",
@@ -120,7 +160,7 @@ export class VideoService {
       throw new Error(`Failed to get summary: ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as { summary: string };
     return data.summary;
   }
 
@@ -129,7 +169,7 @@ export class VideoService {
    */
   async deleteVideo(videoId: string, token: string): Promise<void> {
     const response = await apiRequestWithAuth(
-      API_CONFIG.ENDPOINTS.VIDEOS.DETAIL(videoId),
+      API_ENDPOINTS.VIDEOS.DETAIL(videoId),
       token,
       {
         method: "DELETE",
