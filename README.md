@@ -1,14 +1,19 @@
 # Video Transcriber AI
 
-A full-stack cloud-native video transcription and analysis application with AI-powered features, built on AWS cloud architecture.
-
-![Video Transcriber AI Architecture](./video_transcriber_ai_architecture.png)
-
 ## Overview
 
 This is a production-ready, scalable video transcription system that leverages AWS managed services and modern cloud architecture patterns. The application provides automatic video transcription using Whisper and AI-generated summary.
 
 ## Architecture
+
+![Video Transcriber AI Architecture](./video_transcriber_ai_architecture.png)
+
+## Workflow Summary
+
+- When a user uploads a video, it is saved to S3.
+- After the video is successfully uploaded to S3, a Lambda function sends a message to SQS, triggering the video-processor service on ECS to automatically transcribe and summarize the video.
+- If a task fails three times, it moves to the Dead Letter Queue (DLQ), and the dlq-monitor service updates the video status in DynamoDB to "failed".
+- ECS automatically scales out when the queue exceeds three messages and scales in when only one message remains.
 
 The application is built using **AWS Cloud Architecture** with the following components:
 
