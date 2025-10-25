@@ -29,6 +29,38 @@ output "elasticache_endpoint" {
   value       = "${aws_elasticache_cluster.main.cluster_address}:${aws_elasticache_cluster.main.port}"
 }
 
+# SQS Outputs (needed by app)
+output "sqs_video_processing_queue_url" {
+  description = "URL of the SQS video processing queue"
+  value       = aws_sqs_queue.video_processing_queue.url
+}
+
+output "sqs_video_processing_dlq_url" {
+  description = "URL of the SQS video processing dead letter queue"
+  value       = aws_sqs_queue.video_processing_dlq.url
+}
+
+# Lambda Outputs
+output "lambda_function_name" {
+  description = "Name of the Lambda function"
+  value       = aws_lambda_function.s3_trigger_handler.function_name
+}
+
+output "lambda_function_arn" {
+  description = "ARN of the Lambda function"
+  value       = aws_lambda_function.s3_trigger_handler.arn
+}
+
+output "lambda_log_group_name" {
+  description = "Name of the CloudWatch Log Group for Lambda"
+  value       = aws_cloudwatch_log_group.lambda_log_group.name
+}
+
+output "ecr_repository_url" {
+  description = "URL of the ECR repository for Lambda images"
+  value       = aws_ecr_repository.lambda_repository.repository_url
+}
+
 # ECS Outputs (commented out for minimal setup)
 # output "ecs_cluster_id" {
 #   description = "ID of the ECS cluster"
@@ -53,5 +85,9 @@ output "configuration_summary" {
     cognito_user_pool = aws_cognito_user_pool.main.id
     cognito_client_id = aws_cognito_user_pool_client.main.id
     elasticache       = "${aws_elasticache_cluster.main.cluster_address}:${aws_elasticache_cluster.main.port}"
+    sqs_queue         = aws_sqs_queue.video_processing_queue.url
+    sqs_dlq           = aws_sqs_queue.video_processing_dlq.url
+    lambda_function   = aws_lambda_function.s3_trigger_handler.function_name
+    ecr_repository    = aws_ecr_repository.lambda_repository.repository_url
   }
 }

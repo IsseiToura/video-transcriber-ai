@@ -1,0 +1,88 @@
+# Video Processor Service Dockerfile - Video processing with Whisper
+FROM python:3.11-slim
+
+# Set environment variables
+# Critical: PYTORCH_TRITON_SKIP=1 prevents triton module import errors in CPU-only environments
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTORCH_ENABLE_MPS_FALLBACK=1 \
+    TORCH_CUDA_ARCH_LIST="" \
+    CUDA_VISIBLE_DEVICES="" \
+    TRANSFORMERS_OFFLINE=0 \
+    PYTORCH_TRITON_SKIP=1 \
+    TRITON_PTXAS_PATH="" \
+    DISABLE_TRITON=1 \
+    HF_HUB_ENABLE_HF_TRANSFER=0 \
+    HF_HUB_DISABLE_EXPERIMENTAL_WARNING=1 \
+    HF_HUB_ETAG_TIMEOUT=300 \
+    HF_HUB_DOWNLOAD_TIMEOUT=600
+
+# Set work directory
+WORKDIR /app
+
+# Install system dependencies (including ffmpeg for audio processing)
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    make \
+    curl \
+    git \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies including Whisper
+COPY requirements.txt .
+
+# Install PyTorch CPU version FIRST to avoid downloading CUDA version
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir torch>=2.0.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# Install other dependencies (skip torch-related packages that are already installed)
+# First install base dependencies
+RUN pip install --no-cache-dir \
+    boto3 botocore fastapi numpy openai pydantic \
+    pydantic-settings pymemcache python-dotenv python-jose python-multipart \
+    requests scikit-learn typing_extensions uvicorn \
+    tqdm regex filelock safetensors huggingface-hub packaging
+
+# Install transformers stack without re-downloading torch
+RUN PYTORCH_TRITON_SKIP=1 pip install --no-cache-dir \
+    tokenizers transformers sentence-transformers openai-whisper
+
+# Copy application code
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p /app/data/videos /app/data/transcripts /app/uploads
+
+# Pre-download models to avoid download during processing
+# Download Whisper model
+RUN python -c "import whisper; whisper.load_model('base')"
+
+# Download SentenceTransformer model
+RUN HF_HUB_ENABLE_HF_TRANSFER=0 python -c "\
+from huggingface_hub import snapshot_download; \
+import os; \
+print('Downloading model files from Hugging Face...'); \
+model_path = snapshot_download( \
+    repo_id='sentence-transformers/all-MiniLM-L6-v2', \
+    cache_dir=os.path.expanduser('~/.cache/huggingface'), \
+    resume_download=True, \
+    local_files_only=False \
+); \
+print(f'Model downloaded to: {model_path}'); \
+from sentence_transformers import SentenceTransformer; \
+print('Verifying model can be loaded...'); \
+model = SentenceTransformer('all-MiniLM-L6-v2'); \
+print('✓ Model loaded successfully'); \
+"
+
+# Health check for worker (check if it's running and can connect to SQS)
+HEALTHCHECK --interval=60s --timeout=30s --start-period=30s --retries=3 \
+    CMD python -c "from app.services.sqs_client import SQSClient; SQSClient()" || exit 1
+
+# Run the video processor service
+CMD ["python", "-m", "app.worker.video_processor.main"]

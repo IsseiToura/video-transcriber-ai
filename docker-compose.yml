@@ -1,10 +1,12 @@
 version: "3.8"
 
 services:
-  # Backend API Server
-  backend:
-    image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11690216/assignment1:server
-    container_name: video-transcriber-backend
+  # API Service - FastAPI without Whisper
+  api-service:
+    build:
+      context: ./server
+      dockerfile: Dockerfile.api
+    container_name: video-transcriber-api
     restart: unless-stopped
     env_file:
       - .env
@@ -14,12 +16,66 @@ services:
       - "5000:8000"
     networks:
       - app-network
+    depends_on:
+      - video-processor
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 30s
       retries: 3
       start_period: 5s
+
+  # Video Processor Service - Video processing with Whisper
+  video-processor:
+    build:
+      context: ./server
+      dockerfile: Dockerfile.video-processor
+    container_name: video-transcriber-video-processor
+    restart: unless-stopped
+    env_file:
+      - server/.env
+    environment:
+      - UPLOAD_DIR=/app/data
+    networks:
+      - app-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from app.services.sqs_client import SQSClient; SQSClient()",
+        ]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 30s
+
+  # DLQ Monitor Service - Monitor Dead Letter Queue
+  dlq-monitor:
+    build:
+      context: ./server
+      dockerfile: Dockerfile.dlq
+    container_name: video-transcriber-dlq-monitor
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - UPLOAD_DIR=/app/data
+    networks:
+      - app-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from app.services.sqs_client import SQSClient; SQSClient()",
+        ]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 30s
 
   # Frontend Client
   frontend:
@@ -32,7 +88,7 @@ services:
       - .env
     command: npm run dev -- --host 0.0.0.0
     depends_on:
-      - backend
+      - api-service
     networks:
       - app-network
     healthcheck:

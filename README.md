@@ -1,122 +1,178 @@
-# Video Transcriber Project
+# Video Transcriber AI
 
-This is a full-stack video transcription and analysis application with AI-powered features.
+A full-stack cloud-native video transcription and analysis application with AI-powered features, built on AWS cloud architecture.
+
+![Video Transcriber AI Architecture](./video_transcriber_ai_architecture.png)
+
+## Overview
+
+This is a production-ready, scalable video transcription system that leverages AWS managed services and modern cloud architecture patterns. The application provides automatic video transcription using Whisper and AI-generated summary.
+
+## Architecture
+
+The application is built using **AWS Cloud Architecture** with the following components:
+
+### Frontend Layer
+
+- **CloudFront** (Global): Content delivery network for React application
+- **React Application**: Modern web interface with responsive design
+
+### Application Layer (VPC - Public Subnet)
+
+- **Application Load Balancer**: Traffic distribution and SSL termination
+- **API Service (ECS)**: FastAPI backend for API endpoints
+
+### Processing Layer (VPC - Private Subnet)
+
+- **Lambda Trigger**: S3 event-driven video processing initiation
+- **Video Processor (ECS)**: Whisper-based transcription service with SQS integration
+- **DLQ Monitor (ECS)**: Dead Letter Queue monitoring and retry logic
+
+### Data & Messaging Layer
+
+- **S3**: Video storage and processed transcript storage
+- **DynamoDB**: Video metadata and processing status
+- **SQS**: Message queue for asynchronous video processing
+- **Dead Letter Queue**: Failed message handling and retry mechanism
+
+### Infrastructure Management
+
+- **Terraform**: Infrastructure as Code for AWS resource provisioning
+- **Docker**: Containerization for all services
 
 ## Project Structure
 
 ```
-VideoTransraper/
-├── client/                 # Frontend React Application
-│   ├── src/               # Source code
-│   │   ├── components/    # React components
-│   │   ├── contexts/      # React contexts (Auth)
-│   │   ├── types/         # TypeScript type definitions
-│   │   ├── App.tsx        # Main application component
-│   │   └── main.tsx       # Application entry point
-│   ├── public/            # Static assets
-│   ├── package.json       # Dependencies and scripts
-│   ├── tailwind.config.js # Tailwind CSS configuration
-│   ├── vite.config.ts     # Vite build configuration
-│   └── README.md          # Frontend documentation
-└── README.md              # This file - Project overview
+video-transcriber-ai/
+├── client/                          # Frontend React Application
+│   ├── src/
+│   │   ├── components/             # React components
+│   │   │   ├── VideoUpload.tsx     # Drag & drop upload
+│   │   │   ├── VideoList.tsx       # Video library
+│   │   │   ├── VideoDetail.tsx     # Video player & transcript
+│   │   │   └── VideoProcess.tsx    # Processing status
+│   │   ├── contexts/               # React contexts (Auth)
+│   │   ├── services/               # API integration services
+│   │   ├── types/                  # TypeScript definitions
+│   │   └── layouts/                # Page layouts & auth flows
+│   ├── public/                     # Static assets
+│   ├── Dockerfile                  # Container configuration
+│   └── package.json                # Dependencies
+│
+├── server/                          # Backend Python Application
+│   ├── app/
+│   │   ├── api/v1/                 # API endpoints
+│   │   │   ├── videos.py           # Video CRUD operations
+│   │   │   ├── auth.py             # Authentication
+│   │   │   └── config.py           # Configuration endpoints
+│   │   ├── core/                   # Core functionality
+│   │   │   ├── config.py           # Settings management
+│   │   │   ├── cognito_auth.py     # AWS Cognito integration
+│   │   │   └── dependencies.py     # FastAPI dependencies
+│   │   ├── services/               # Business logic
+│   │   │   ├── video_service.py    # Video processing
+│   │   │   ├── audio_processor.py  # Audio extraction
+│   │   │   ├── summary_generator.py # AI summaries
+│   │   │   ├── cache_service.py    # ElastiCache integration
+│   │   │   ├── sqs_client.py       # SQS operations
+│   │   │   └── text_compressor.py  # Transcript compression
+│   │   ├── lambda/                 # Lambda functions
+│   │   │   └── s3_trigger_handler.py # S3 event processing
+│   │   ├── worker/                 # Background workers
+│   │   │   ├── video_processor/    # Video processing worker
+│   │   │   └── dlq_monitor/        # DLQ monitoring worker
+│   │   ├── repositories/           # Data access layer
+│   │   └── schemas/                # Pydantic models
+│   ├── Dockerfile.api              # API service container
+│   ├── Dockerfile.video-processor  # Video processor container
+│   ├── Dockerfile.dlq              # DLQ monitor container
+│   ├── Dockerfile.lambda           # Lambda deployment package
+│   └── requirements.txt            # Python dependencies
+│
+├── terraform/                       # Infrastructure as Code
+│   ├── main.tf                     # Main configuration
+│   ├── s3.tf                       # S3 bucket configuration
+│   ├── dynamodb.tf                 # DynamoDB tables
+│   ├── sqs.tf                      # SQS queues
+│   ├── lambda.tf                   # Lambda functions
+│   ├── cognito.tf                  # User authentication
+│   ├── elasticache.tf              # Memcached cluster
+│   ├── secrets_manager.tf          # Secrets storage
+│   ├── ssm_parameters.tf           # Configuration parameters
+│   └── outputs.tf                  # Output values
+│
+├── docker-compose.yml              # Local development setup
+└── README.md                       # This file
 ```
 
 ## Features
 
-### 🔐 Authentication
+### 🔐 Authentication & Security
 
-- User login/logout functionality
-- Session management with localStorage
-- Secure access to video features
+- AWS Cognito user authentication
+- Email verification and password recovery
 
 ### 🎥 Video Management
 
-- Drag & drop video upload
-- Multiple video format support
-- Upload progress tracking
-- Video library organization
+- Drag & drop video upload with progress tracking
+- S3-based storage with presigned URL generation
 
-### 🤖 AI-Powered Analysis
+### 🤖 AI-Powered Transcription & Analysis
 
-- Automatic video transcription
-- AI-generated content summaries
-- Intelligent question answering
-- Chat interface for video content
+- Automatic transcription using Whisper
+- AI-generated content summaries (GPT-4)
+
+### ⚡ High Performance & Scalability
+
+- Asynchronous video processing with SQS
+- Dead Letter Queue for failed job retry
+- Horizontal scaling with ECS
+- CloudFront CDN for global content delivery
 
 ### 🎨 Modern UI/UX
 
 - Responsive design with Tailwind CSS
-- Glass morphism effects
-- Gradient backgrounds and animations
+- Glass morphism effects and gradient animations
+- Real-time processing status updates
 - Professional enterprise-grade interface
 
 ## Technology Stack
 
-- **Frontend**: React 18 + TypeScript
+### Frontend
+
+- **Framework**: React 18 + TypeScript
 - **Build Tool**: Vite
 - **Styling**: Tailwind CSS
-- **State Management**: React Context API
-- **Icons**: Lucide React
-- **Backend**: FastAPI + Python
+
+### Backend
+
+- **Framework**: FastAPI (Python 3.12)
+- **Authentication**: AWS Cognito + python-jose
+- **AI/ML**:
+  - OpenAI Whisper (transcription)
+  - OpenAI GPT-4 (summaries & Q&A)
+  - Sentence Transformers (text embedding)
+- **Audio Processing**: NumPy, FFmpeg
+- **Async**: Uvicorn ASGI server
+
+### AWS Services
+
+- **Compute**: ECS Fargate, Lambda
+- **Storage**: S3
 - **Database**: DynamoDB
-- **Storage**: AWS S3
-- **Cache**: AWS ElastiCache Memcached
-- **Authentication**: AWS Cognito
+- **Cache**: ElastiCache (Memcached)
+- **Messaging**: SQS
+- **Authentication**: Cognito
+- **CDN**: CloudFront
+- **Load Balancer**: Application Load Balancer
+- **Secrets**: Secrets Manager, Systems Manager Parameter Store
 
-## Getting Started
+### Infrastructure
 
-### Prerequisites
+- **IaC**: Terraform
+- **Containers**: Docker, Docker Compose
+- **Orchestration**: Amazon ECS
 
-- Node.js 16+
-- npm or yarn
-- Python 3.8+
-- AWS Account with ElastiCache, DynamoDB, S3, and Cognito access
+---
 
-### Environment Configuration
-
-The application requires the following environment variables to be configured:
-
-#### AWS Services
-
-- `AWS_REGION`: AWS region (default: ap-southeast-2)
-- `S3_BUCKET`: S3 bucket name for video storage
-- `DDB_VIDEOS_TABLE`: DynamoDB table name for video metadata
-- `COGNITO_USER_POOL_ID`: AWS Cognito User Pool ID
-- `COGNITO_APP_CLIENT_ID`: AWS Cognito App Client ID
-
-#### ElastiCache Memcached
-
-- `ELASTICACHE_MEMCACHED_ENDPOINT`: ElastiCache cluster endpoint
-- `ELASTICACHE_MEMCACHED_TTL`: Cache TTL in seconds (default: 3600)
-
-#### AI Services
-
-- `OPENAI_API_KEY`: OpenAI API key for AI features
-
-Copy `server/env.example` to `server/.env` and configure the values for your environment.
-
-### Frontend Setup
-
-```bash
-cd client
-npm install
-npm run dev
-```
-
-### Build for Production
-
-```bash
-cd client
-npm run build
-```
-
-## Demo Credentials
-
-- **Email**: demo@example.com
-- **Password**: password
-
-## Development
-
-The frontend application is located in the `client/` directory and contains all the React components, styling, and configuration files needed to run the video transcription application.
-
-For detailed frontend documentation, see `client/README.md`.
+**Built with ☁️ AWS Cloud Architecture**

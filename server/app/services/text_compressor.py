@@ -6,6 +6,7 @@ import re
 import logging
 from typing import Dict, List
 import numpy as np
+import torch
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -18,7 +19,16 @@ class TextCompressor:
     
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
         """Initialize with sentence transformer model."""
-        self.model = SentenceTransformer(model_name)
+        # Auto-detect device: use GPU if available, otherwise CPU
+        if torch.cuda.is_available():
+            device = 'cuda'
+        elif torch.backends.mps.is_available():
+            device = 'mps'  # Apple Silicon GPU
+        else:
+            device = 'cpu'
+        
+        logger.info(f"Using device: {device}")
+        self.model = SentenceTransformer(model_name, device=device)
         self.embeddings_cache = {}
         logger.info(f"TextCompressor initialized with model: {model_name}")
     

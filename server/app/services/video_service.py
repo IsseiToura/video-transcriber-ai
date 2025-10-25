@@ -8,10 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional, List
 import boto3
-from .audio_processor import AudioProcessor
 from app.core.config import get_settings
-from .text_compressor import TextCompressor
-from .summary_generator import SummaryGenerator
 from app.repositories.video_repository import VideoRepository
 from .cache_service import cache_service
 
@@ -26,13 +23,37 @@ class VideoService:
     def __init__(self):
         self.videos_dir = Path(settings.UPLOAD_DIR) / "videos"
         self.videos_dir.mkdir(parents=True, exist_ok=True)
-        self.audio_processor = AudioProcessor()
-        self.text_compressor = TextCompressor()
-        self.summary_generator = SummaryGenerator()
+        self._audio_processor = None  # Lazy load to avoid importing whisper unnecessarily
+        self._text_compressor = None  # Lazy load to avoid importing numpy, torch, etc.
+        self._summary_generator = None  # Lazy load to avoid unnecessary imports
         self.s3_client = boto3.client("s3", region_name=settings.AWS_REGION)
         self.s3_bucket = settings.S3_BUCKET
         # DynamoDB repository
         self.video_repo = VideoRepository()
+    
+    @property
+    def audio_processor(self):
+        """Lazy load AudioProcessor only when needed (to avoid importing whisper)."""
+        if self._audio_processor is None:
+            from .audio_processor import AudioProcessor
+            self._audio_processor = AudioProcessor()
+        return self._audio_processor
+    
+    @property
+    def text_compressor(self):
+        """Lazy load TextCompressor only when needed (to avoid importing numpy, torch, etc.)."""
+        if self._text_compressor is None:
+            from .text_compressor import TextCompressor
+            self._text_compressor = TextCompressor()
+        return self._text_compressor
+    
+    @property
+    def summary_generator(self):
+        """Lazy load SummaryGenerator only when needed."""
+        if self._summary_generator is None:
+            from .summary_generator import SummaryGenerator
+            self._summary_generator = SummaryGenerator()
+        return self._summary_generator
     
     def save_video_metadata(self, file_id: str, filename: str, s3_key: str, owner_username: str) -> str:
         """Save video metadata after S3 upload."""

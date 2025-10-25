@@ -89,7 +89,7 @@ const VideoUpload = ({ onUploadComplete }: VideoUploadProps) => {
       // Dismiss loading toast and show success toast
       toast.dismiss(uploadingToast);
       toast.success(
-        "Video uploaded successfully! Redirecting to processing..."
+        "Video uploaded successfully! Processing will start automatically..."
       );
     } catch (error) {
       console.error("Upload error:", error);
@@ -166,7 +166,7 @@ const VideoUpload = ({ onUploadComplete }: VideoUploadProps) => {
           <div className="flex items-center justify-center space-x-8 text-sm text-gray-500">
             <div className="flex items-center space-x-2">
               <Zap className="h-4 w-4 text-yellow-500" />
-              <span>Fast Processing</span>
+              <span>Auto Processing</span>
             </div>
             <div className="flex items-center space-x-2">
               <Sparkles className="h-4 w-4 text-purple-500" />

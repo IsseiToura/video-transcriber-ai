@@ -52,7 +52,7 @@ const VideoDetail = ({ video }: VideoDetailProps) => {
             </p>
             <div className="flex items-center mt-3">
               <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 border border-green-200">
-                Ready for Analysis
+                Processing Completed
               </span>
             </div>
           </div>

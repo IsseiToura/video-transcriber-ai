@@ -13,17 +13,16 @@ export interface VideoInfo {
   summary?: string;
   transcript?: string;
   created_at: string;
-  status: "uploading" | "uploaded" | "processing" | "completed" | "error";
+  status:
+    | "uploading"
+    | "uploaded"
+    | "processing"
+    | "completed"
+    | "error"
+    | "failed";
   file_type?: string;
   s3_key?: string;
   s3_bucket?: string;
-}
-
-export interface ProcessResponse {
-  message: string;
-  video_id: string;
-  status: string;
-  summary: string;
 }
 
 export interface PresignedUrlResponse {
@@ -44,6 +43,7 @@ export const VIDEO_STATUS = {
   PROCESSING: "processing",
   COMPLETED: "completed",
   ERROR: "error",
+  FAILED: "failed",
 } as const;
 
 export const VIDEO_STATUS_LABELS = {
@@ -52,6 +52,7 @@ export const VIDEO_STATUS_LABELS = {
   [VIDEO_STATUS.PROCESSING]: "Processing",
   [VIDEO_STATUS.COMPLETED]: "Completed",
   [VIDEO_STATUS.ERROR]: "Error",
+  [VIDEO_STATUS.FAILED]: "Failed",
 } as const;
 
 export const VIDEO_STATUS_STYLES = {
@@ -64,5 +65,7 @@ export const VIDEO_STATUS_STYLES = {
   [VIDEO_STATUS.COMPLETED]:
     "bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 border border-green-200",
   [VIDEO_STATUS.ERROR]:
+    "bg-gradient-to-r from-red-100 to-pink-100 text-red-800 border border-red-200",
+  [VIDEO_STATUS.FAILED]:
     "bg-gradient-to-r from-red-100 to-pink-100 text-red-800 border border-red-200",
 } as const;

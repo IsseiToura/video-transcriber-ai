@@ -21,17 +21,11 @@ class VideoInfo(BaseModel):
     summary: Optional[str] = None
     transcript: Optional[str] = None
     created_at: datetime
-    status: Literal["uploading", "uploaded", "processing", "completed", "error"] = "uploaded"
+    status: Literal["uploading", "uploaded", "processing", "completed", "error", "failed"] = "uploaded"
     file_type: Optional[str] = None 
     s3_key: Optional[str] = None 
     s3_bucket: Optional[str] = None 
     
-class ProcessResponse(BaseModel):
-    """Video processing response schema."""
-    message: str
-    video_id: str
-    status: str
-    summary: str
 
 class PresignedUrlResponse(BaseModel):
     """Presigned URL response schema."""

@@ -5,7 +5,7 @@ Video endpoints.
 from fastapi import APIRouter, HTTPException, status, Depends, Query
 from fastapi.responses import PlainTextResponse
 from app.schemas.video import (
-    VideoUploadResponse, VideoInfo, ProcessResponse, PresignedUrlResponse, VideoMetadataRequest
+    VideoUploadResponse, VideoInfo, PresignedUrlResponse, VideoMetadataRequest
 )
 from typing import List
 from app.services.video_service import VideoService
@@ -141,30 +141,6 @@ async def delete_video(
     # 204 No Content
     return None
 
-@router.post("/{video_id}/process", response_model=ProcessResponse)
-async def process_video(
-    video_id: str,
-    current_user: dict = Depends(get_current_user)
-):
-    """Process video: extract audio, transcribe, summarize."""
-    try:
-        result = video_service.process_video(video_id, current_user["username"])
-        return ProcessResponse(
-            message="Video processed successfully",
-            video_id=video_id,
-            status="completed",
-            summary=result["summary"]
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing video: {str(e)}"
-        )
 
 @router.get("/{video_id}/transcript", response_class=PlainTextResponse)
 async def get_transcript_text(

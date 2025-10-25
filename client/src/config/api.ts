@@ -17,7 +17,6 @@ export const API_ENDPOINTS = {
     METADATA: "/videos/metadata",
     LIST: "/videos/",
     DETAIL: (id: string) => `/videos/${id}`,
-    PROCESS: (id: string) => `/videos/${id}/process`,
     TRANSCRIPT: (id: string) => `/videos/${id}/transcript`,
     SUMMARY: (id: string) => `/videos/${id}/summary`,
     CHAT: (id: string) => `/videos/${id}/chat`,

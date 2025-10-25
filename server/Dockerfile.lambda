@@ -1,0 +1,12 @@
+# Use AWS Lambda Python 3.12 base image
+FROM public.ecr.aws/lambda/python:3.12
+
+# Copy requirements and install dependencies
+COPY requirements-lambda.txt ${LAMBDA_TASK_ROOT}/
+RUN pip install --no-cache-dir -r ${LAMBDA_TASK_ROOT}/requirements-lambda.txt
+
+# Copy app directory (needed for imports)
+COPY app/ ${LAMBDA_TASK_ROOT}/app/
+
+# Set the CMD to your handler
+CMD ["app.lambda.s3_trigger_handler.lambda_handler"]

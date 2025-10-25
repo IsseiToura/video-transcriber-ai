@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Play, Sparkles, Zap, FileText } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { Sparkles, Zap, FileText } from "lucide-react";
 import type { VideoInfo } from "../types/video";
 import VideoDetail from "./VideoDetail";
 import { VideoService } from "../services";
@@ -15,86 +15,64 @@ const VideoProcess = ({ video }: VideoProcessProps) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isCompleted, setIsCompleted] = useState(video.status === "completed");
   const [processedVideo, setProcessedVideo] = useState<VideoInfo | null>(
-    video.status === "completed" ? video : null
+    video.status === "completed" ? video : video
   );
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const completed = video.status === "completed";
     setIsProcessing(false);
     setIsCompleted(completed);
-    setProcessedVideo(completed ? video : null);
+    setProcessedVideo(video); // Always set the current video state
   }, [video.video_id, video.status]);
 
-  const handleStartProcess = async () => {
-    if (!user?.access_token) {
-      console.error("No authentication token available");
-      toast.error("Authentication required");
-      return;
-    }
+  // Polling for status updates when video is processing
+  useEffect(() => {
+    const startPolling = () => {
+      // Start polling if video is processing or uploaded (waiting for Lambda to start processing)
+      if (
+        (processedVideo?.status === "processing" ||
+          processedVideo?.status === "uploaded") &&
+        user?.access_token
+      ) {
+        pollingIntervalRef.current = setInterval(async () => {
+          try {
+            const videoService = new VideoService();
+            const videoInfo = await videoService.getVideoInfo(
+              processedVideo.video_id,
+              user.access_token
+            );
 
-    setIsProcessing(true);
-    toast.loading("Starting video processing...");
+            // Update the processed video with latest info
+            setProcessedVideo(videoInfo);
 
-    try {
-      await processVideo(video.video_id, user.access_token);
-    } catch (error) {
-      console.error("Processing error:", error);
-      setIsProcessing(false);
-      toast.dismiss();
-      toast.error("Failed to start processing");
-    }
-  };
-
-  const processVideo = async (videoId: string, token: string) => {
-    try {
-      const videoService = new VideoService();
-      const processResponse = await videoService.processVideo(videoId, token);
-
-      if (processResponse.status === "completed") {
-        try {
-          const videoInfo = await videoService.getVideoInfo(videoId, token);
-          setProcessedVideo(videoInfo);
-        } catch (infoError) {
-          console.error("Failed to get video info:", infoError);
-          const completedVideo: VideoInfo = {
-            video_id: videoId,
-            filename: video.filename,
-            created_at: video.created_at,
-            status: "completed" as const,
-            transcript: "Transcript processing completed",
-            summary: "Summary processing completed",
-          };
-          setProcessedVideo(completedVideo);
-        }
-      } else if (processResponse.status === "error") {
-        throw new Error(processResponse.message || "Processing failed");
-      } else {
-        const processingVideo: VideoInfo = {
-          video_id: videoId,
-          filename: video.filename,
-          created_at: video.created_at,
-          status: processResponse.status as VideoInfo["status"],
-          transcript: undefined,
-          summary: undefined,
-        };
-        setProcessedVideo(processingVideo);
+            if (videoInfo.status === "completed") {
+              setIsCompleted(true);
+              clearInterval(pollingIntervalRef.current!);
+              pollingIntervalRef.current = null;
+              toast.success("Video processing completed automatically!");
+            } else if (videoInfo.status === "error") {
+              setIsProcessing(false);
+              clearInterval(pollingIntervalRef.current!);
+              pollingIntervalRef.current = null;
+              toast.error("Video processing failed");
+            }
+          } catch (error) {
+            console.error("Error polling video status:", error);
+          }
+        }, 3000); // Poll every 3 seconds
       }
+    };
 
-      setIsProcessing(false);
-      setIsCompleted(true);
+    startPolling();
 
-      // Dismiss loading toast and show success toast
-      toast.dismiss();
-      toast.success("Video processing completed successfully!");
-    } catch (error) {
-      console.error("Processing error:", error);
-      setIsProcessing(false);
-
-      // Dismiss loading toast and show error toast
-      toast.dismiss();
-      toast.error("Video processing failed");
-    }
-  };
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, [processedVideo?.status, processedVideo?.video_id, user?.access_token]);
 
   if (isCompleted && processedVideo) {
     return <VideoDetail video={processedVideo} />;
@@ -118,37 +96,50 @@ const VideoProcess = ({ video }: VideoProcessProps) => {
               Uploaded {new Date(video.created_at).toLocaleDateString()}
             </p>
             <div className="flex justify-center sm:justify-start mt-3">
-              <span className="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 border border-blue-200">
-                Ready for Processing
+              <span
+                className={`inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium ${
+                  processedVideo?.status === "processing"
+                    ? "bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-800 border border-yellow-200"
+                    : "bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 border border-blue-200"
+                }`}
+              >
+                {processedVideo?.status === "processing"
+                  ? "Processing in Progress"
+                  : "Processing Will Start Automatically"}
               </span>
             </div>
           </div>
         </div>
         <div className="flex justify-center sm:justify-end mt-4">
-          {!isProcessing && (
-            <button
-              onClick={handleStartProcess}
-              className="inline-flex items-center px-4 py-2 sm:px-6 sm:py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg sm:rounded-xl font-semibold text-sm sm:text-base lg:text-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-4 focus:ring-purple-500/30 transition-all duration-200 transform hover:scale-105 shadow-lg w-full sm:w-auto"
-            >
-              <Play className="h-4 w-4 sm:h-5 sm:w-5 mr-2 sm:mr-3" />
-              Start Processing
-            </button>
-          )}
+          <div className="text-center">
+            <p className="text-sm text-gray-600 mb-2">
+              Processing will start automatically after upload
+            </p>
+            <div className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 rounded-lg border border-green-200">
+              <Sparkles className="h-4 w-4 mr-2" />
+              Auto-processing enabled
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Processing State */}
-      {isProcessing && (
+      {(isProcessing ||
+        processedVideo?.status === "processing" ||
+        (processedVideo?.status === "uploaded" && !isCompleted)) && (
         <div className="bg-white/80 backdrop-blur-sm p-4 sm:p-6 lg:p-8 rounded-xl sm:rounded-2xl border border-white/40 shadow-xl text-center">
           <div className="h-12 w-12 sm:h-16 sm:w-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6 shadow-2xl">
             <div className="animate-spin rounded-full h-6 w-6 sm:h-8 sm:w-8 border-b-2 border-white"></div>
           </div>
           <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">
-            Processing Your Video
+            {processedVideo?.status === "processing"
+              ? "Processing Your Video"
+              : "Waiting for Processing to Start"}
           </h3>
           <p className="text-sm sm:text-base lg:text-lg text-gray-600 max-w-md mx-auto mb-4 sm:mb-6 px-4">
-            Our AI is analyzing your video and creating a comprehensive
-            transcript. This may take a few minutes...
+            {processedVideo?.status === "processing"
+              ? "Our AI is analyzing your video and creating a comprehensive transcript. This may take a few minutes..."
+              : "Your video has been uploaded successfully. Processing will start automatically via Lambda function..."}
           </p>
 
           {/* Processing Steps */}

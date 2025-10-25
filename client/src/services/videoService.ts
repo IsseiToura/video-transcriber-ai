@@ -2,7 +2,6 @@ import { API_ENDPOINTS, apiRequestWithAuth } from "../config/api";
 import type {
   VideoInfo,
   VideoUploadResponse,
-  ProcessResponse,
   PresignedUrlResponse,
   VideoMetadataRequest,
 } from "../types";
@@ -66,25 +65,6 @@ export class VideoService {
 
     onProgress?.("Upload completed!");
     return metadataResponse.json() as Promise<VideoUploadResponse>;
-  }
-
-  /**
-   * Process video or audio file (transcription, summary)
-   */
-  async processVideo(videoId: string, token: string): Promise<ProcessResponse> {
-    const response = await apiRequestWithAuth(
-      API_ENDPOINTS.VIDEOS.PROCESS(videoId),
-      token,
-      {
-        method: "POST",
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(`Processing failed: ${response.statusText}`);
-    }
-
-    return response.json() as Promise<ProcessResponse>;
   }
 
   /**

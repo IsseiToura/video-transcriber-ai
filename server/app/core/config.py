@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     ELASTICACHE_MEMCACHED_ENDPOINT: str = ""
     ELASTICACHE_MEMCACHED_TTL: int = AppConstants.ELASTICACHE_MEMCACHED_TTL
     
+    # SQS Configuration
+    SQS_VIDEO_PROCESSING_QUEUE: str = ""
+    SQS_VIDEO_PROCESSING_DLQ: str = ""
+    
     # AWS Cognito
     COGNITO_USER_POOL_ID: str = ""
     COGNITO_APP_CLIENT_ID: str = ""
@@ -123,6 +127,18 @@ class Settings(BaseSettings):
                 self.ELASTICACHE_MEMCACHED_ENDPOINT = self._aws_config_manager.get_parameter(
                     "/video-transcriber-ai/dev/aws/elasticache-memcached-endpoint",
                     fallback_env_var="ELASTICACHE_MEMCACHED_ENDPOINT"
+                )
+            
+            if not self.SQS_VIDEO_PROCESSING_QUEUE:
+                self.SQS_VIDEO_PROCESSING_QUEUE = self._aws_config_manager.get_parameter(
+                    "/video-transcriber-ai/dev/aws/sqs-video-processing-queue",
+                    fallback_env_var="SQS_VIDEO_PROCESSING_QUEUE"
+                )
+            
+            if not self.SQS_VIDEO_PROCESSING_DLQ:
+                self.SQS_VIDEO_PROCESSING_DLQ = self._aws_config_manager.get_parameter(
+                    "/video-transcriber-ai/dev/aws/sqs-video-processing-dlq",
+                    fallback_env_var="SQS_VIDEO_PROCESSING_DLQ"
                 )
                 
             # Always try to get from Parameter Store first, then fallback to environment

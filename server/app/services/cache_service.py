@@ -4,7 +4,6 @@ Memcached cache service for video information caching.
 
 import logging
 from typing import Optional, Dict, Any
-from pymemcache.client.base import Client
 from app.core.config import get_settings
 
 # Configure logging
@@ -25,6 +24,13 @@ class CacheService:
         try:
             if not settings.ELASTICACHE_MEMCACHED_ENDPOINT:
                 logger.warning("ElastiCache endpoint not configured, cache disabled")
+                return
+            
+            # Lazy import pymemcache to avoid dependency in lightweight services
+            try:
+                from pymemcache.client.base import Client
+            except ImportError:
+                logger.warning("pymemcache not installed, cache disabled")
                 return
             
             # Use the endpoint directly as a string (same as working example)
