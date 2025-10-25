@@ -8,7 +8,7 @@ This is a production-ready, scalable video transcription system that leverages A
 
 ![Video Transcriber AI Architecture](./video_transcriber_ai_architecture.png)
 
-## Workflow Summary
+### Workflow Summary
 
 - When a user uploads a video, it is saved to S3.
 - After the video is successfully uploaded to S3, a Lambda function sends a message to SQS, triggering the video-processor service on ECS to automatically transcribe and summarize the video.
