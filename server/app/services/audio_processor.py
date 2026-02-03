@@ -9,22 +9,35 @@ from typing import Dict, List, Tuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import shutil
 import glob
-import os
 import whisper
 from .text_compressor import TextCompressor
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
+# Global variable for worker processes (each process has its own copy)
+_worker_model = None
+
+
+def _init_worker():
+    """Initialize worker process by loading Whisper model once per process.
+    
+    This function is called once when each worker process starts,
+    avoiding redundant model loading for each chunk.
+    """
+    global _worker_model
+    _worker_model = whisper.load_model("base")
+    logger.info("Whisper model loaded in worker process")
+
 
 def _transcribe_chunk_worker(chunk_path: str) -> Dict:
     """Worker function to transcribe a single audio chunk with Whisper.
 
-    Note: This runs in a separate process; it loads the model inside the worker
-    to avoid non-picklable state.
+    Note: This runs in a separate process and reuses the model loaded
+    by _init_worker() to avoid loading the model for each chunk.
     """
-    model = whisper.load_model("base")
-    result = model.transcribe(chunk_path, word_timestamps=True)
+    global _worker_model
+    result = _worker_model.transcribe(chunk_path, word_timestamps=True)
     return result
 
 
@@ -110,14 +123,17 @@ class AudioProcessor:
 
             if not chunk_paths:
                 logger.warning(f"No chunks generated for audio: {audio_path}. Falling back to single-pass transcription.")
-                single_result = _transcribe_chunk_worker(str(audio_path))
+                # Fallback: load model directly since we're not using ProcessPoolExecutor
+                model = whisper.load_model("base")
+                single_result = model.transcribe(str(audio_path), word_timestamps=True)
                 segments = single_result.get("segments", [])
                 logger.info(f"Audio transcription completed successfully. Audio: {audio_path}, Segments: {len(segments)}")
                 return segments
 
             # Transcribe chunks in parallel with max_workers=2
+            # initializer loads the model once per worker process
             futures = {}
-            with ProcessPoolExecutor(max_workers=2) as executor:
+            with ProcessPoolExecutor(max_workers=2, initializer=_init_worker) as executor:
                 for idx, chunk_path in enumerate(chunk_paths):
                     futures[executor.submit(_transcribe_chunk_worker, str(chunk_path))] = (idx, chunk_path)
 
