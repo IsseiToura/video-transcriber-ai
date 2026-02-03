@@ -74,13 +74,15 @@ video-transcriber-ai/
 │   │   │   ├── config.py           # Settings management
 │   │   │   ├── cognito_auth.py     # AWS Cognito integration
 │   │   │   └── dependencies.py     # FastAPI dependencies
-│   │   ├── services/               # Business logic
-│   │   │   ├── video_service.py    # Video processing
-│   │   │   ├── audio_processor.py  # Audio extraction
-│   │   │   ├── summary_generator.py # AI summaries
-│   │   │   ├── cache_service.py    # ElastiCache integration
-│   │   │   ├── sqs_client.py       # SQS operations
+│   │   ├── services/               # Business logic layer
+│   │   │   ├── video_service.py    # Video processing orchestration
+│   │   │   ├── audio_processor.py  # Audio extraction & transcription
+│   │   │   ├── summary_generator.py # AI-powered summaries
 │   │   │   └── text_compressor.py  # Transcript compression
+│   │   ├── clients/                # External system clients
+│   │   │   ├── sqs_client.py       # SQS operations
+│   │   │   ├── s3_client.py        # S3 presigned URLs
+│   │   │   └── cache_client.py     # ElastiCache integration
 │   │   ├── repositories/           # Data access layer
 │   │   │   └── video_repository.py # Video data access (DynamoDB)
 │   │   ├── lambda/                 # Lambda functions

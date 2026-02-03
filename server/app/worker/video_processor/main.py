@@ -7,7 +7,7 @@ import signal
 import sys
 import time
 
-from app.services.sqs_client import SQSClient
+from app.clients.sqs_client import SQSClient
 from app.core.config import get_settings
 from .config import MAX_MESSAGES_PER_POLL, LONG_POLL_WAIT_TIME, ERROR_RETRY_DELAY, NO_MESSAGE_SLEEP
 from .message_handler import MessageHandler

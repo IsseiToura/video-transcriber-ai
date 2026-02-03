@@ -11,7 +11,7 @@ import boto3
 from app.core.config import get_settings
 from app.repositories.video_repository import VideoRepository
 from app.schemas.video import Video
-from .cache_service import cache_service
+from app.clients.cache_client import cache_client
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -74,8 +74,8 @@ class VideoService:
         )
         
         # Invalidate cache for this video
-        if cache_service.is_available():
-            cache_service.invalidate_video_info(file_id, owner_username)
+        if cache_client.is_available():
+            cache_client.invalidate_video_info(file_id, owner_username)
             logger.debug(f"Invalidated cache for new video {file_id}")
         
         return file_id
@@ -83,9 +83,9 @@ class VideoService:
     def get_video_info(self, video_id: str, owner_username: str) -> Optional[Video]:
         """Get video or audio file information with caching."""
         # Try to get from cache first
-        if cache_service.is_available():
-            cache_key = cache_service.get_video_info_key(video_id, owner_username)
-            cached_data = cache_service.get(cache_key)
+        if cache_client.is_available():
+            cache_key = cache_client.get_video_info_key(video_id, owner_username)
+            cached_data = cache_client.get(cache_key)
             if cached_data:
                 logger.debug(f"Cache hit for video {video_id}")
                 # Handle cached data format (Python dict string representation with function calls)
@@ -123,9 +123,9 @@ class VideoService:
         video = self.video_repo.get(video_id, owner_username)
         
         # Cache the result if available (store as dict for cache compatibility)
-        if video and cache_service.is_available():
-            cache_key = cache_service.get_video_info_key(video_id, owner_username)
-            cache_service.set(cache_key, video.model_dump())
+        if video and cache_client.is_available():
+            cache_key = cache_client.get_video_info_key(video_id, owner_username)
+            cache_client.set(cache_key, video.model_dump())
             logger.debug(f"Cached video info for {video_id}")
         
         return video
@@ -178,8 +178,8 @@ class VideoService:
         self.video_repo.delete(video_id, owner_username)
         
         # Invalidate cache when video is deleted
-        if cache_service.is_available():
-            cache_service.invalidate_video_info(video_id, owner_username)
+        if cache_client.is_available():
+            cache_client.invalidate_video_info(video_id, owner_username)
             logger.debug(f"Invalidated cache for deleted video {video_id}")
         
         return True
@@ -207,8 +207,8 @@ class VideoService:
         self.video_repo.update_fields(video_id, {"status": "processing"}, owner_username)
         
         # Invalidate cache when status changes
-        if cache_service.is_available():
-            cache_service.invalidate_video_info(video_id, owner_username)
+        if cache_client.is_available():
+            cache_client.invalidate_video_info(video_id, owner_username)
             logger.debug(f"Invalidated cache for processing video {video_id}")
         
         try:
@@ -259,8 +259,8 @@ class VideoService:
         self.video_repo.update_fields(video_id, {"status": "completed"}, owner_username)
         
         # Invalidate cache when processing completes
-        if cache_service.is_available():
-            cache_service.invalidate_video_info(video_id, owner_username)
+        if cache_client.is_available():
+            cache_client.invalidate_video_info(video_id, owner_username)
             logger.debug(f"Invalidated cache for completed video {video_id}")
         
         # Clean up temporary files downloaded from S3

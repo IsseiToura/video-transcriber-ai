@@ -9,7 +9,7 @@ from app.schemas.video import (
 )
 from typing import List
 from app.services.video_service import VideoService
-from app.services.s3_presigned_url_service import create_presigned_url
+from app.clients.s3_client import create_presigned_url
 from app.core.dependencies import get_current_user
 
 router = APIRouter()

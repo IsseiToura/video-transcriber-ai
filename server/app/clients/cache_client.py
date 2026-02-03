@@ -1,5 +1,5 @@
 """
-Memcached cache service for video information caching.
+Memcached cache client for video information caching.
 """
 
 import logging
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-class CacheService:
+class CacheClient:
     """Memcached cache service for video data."""
     
     def __init__(self):
@@ -158,5 +158,5 @@ class CacheService:
         return self.delete(key)
 
 
-# Global cache service instance
-cache_service = CacheService()
+# Global cache client instance
+cache_client = CacheClient()

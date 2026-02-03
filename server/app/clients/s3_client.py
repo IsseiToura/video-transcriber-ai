@@ -1,3 +1,7 @@
+"""
+S3 client for presigned URL generation.
+"""
+
 import boto3
 import uuid
 from app.core.config import get_settings
