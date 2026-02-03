@@ -5,7 +5,7 @@ Video repository backed by DynamoDB.
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from app.services.dynamodb_client import DynamoDBClient
+from app.repositories.dynamodb_client import DynamoDBClient
 
 
 class VideoRepository:

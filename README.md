@@ -81,12 +81,14 @@ video-transcriber-ai/
 │   │   │   ├── cache_service.py    # ElastiCache integration
 │   │   │   ├── sqs_client.py       # SQS operations
 │   │   │   └── text_compressor.py  # Transcript compression
+│   │   ├── repositories/           # Data access layer
+│   │   │   ├── video_repository.py # Video data access abstraction
+│   │   │   └── dynamodb_client.py  # DynamoDB operations
 │   │   ├── lambda/                 # Lambda functions
 │   │   │   └── s3_trigger_handler.py # S3 event processing
 │   │   ├── worker/                 # Background workers
 │   │   │   ├── video_processor/    # Video processing worker
 │   │   │   └── dlq_monitor/        # DLQ monitoring worker
-│   │   ├── repositories/           # Data access layer
 │   │   └── schemas/                # Pydantic models
 │   ├── Dockerfile.api              # API service container
 │   ├── Dockerfile.video-processor  # Video processor container
