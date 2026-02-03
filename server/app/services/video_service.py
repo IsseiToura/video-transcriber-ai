@@ -10,6 +10,7 @@ from typing import Dict, Optional, List
 import boto3
 from app.core.config import get_settings
 from app.repositories.video_repository import VideoRepository
+from app.schemas.video import Video
 from .cache_service import cache_service
 
 # Configure logging
@@ -79,7 +80,7 @@ class VideoService:
         
         return file_id
     
-    def get_video_info(self, video_id: str, owner_username: str) -> Optional[Dict]:
+    def get_video_info(self, video_id: str, owner_username: str) -> Optional[Video]:
         """Get video or audio file information with caching."""
         # Try to get from cache first
         if cache_service.is_available():
@@ -113,57 +114,59 @@ class VideoService:
                     except Exception as e:
                         logger.warning(f"Failed to decode cached string data for video {video_id}: {e}")
                         cached_data = None
-                return cached_data
+                # Convert cached dict to Video domain model
+                if cached_data and isinstance(cached_data, dict):
+                    return Video.from_dict(cached_data)
+                return None
         
-        # If not in cache, get from database
-        video_info = self.video_repo.get(video_id, owner_username)
+        # If not in cache, get from database (already returns Video)
+        video = self.video_repo.get(video_id, owner_username)
         
-        # Cache the result if available
-        if video_info and cache_service.is_available():
+        # Cache the result if available (store as dict for cache compatibility)
+        if video and cache_service.is_available():
             cache_key = cache_service.get_video_info_key(video_id, owner_username)
-            cache_service.set(cache_key, video_info)
+            cache_service.set(cache_key, video.model_dump())
             logger.debug(f"Cached video info for {video_id}")
         
-        return video_info
+        return video
     
-    def get_all_videos(self, owner_username: str) -> List[Dict]:
+    def get_all_videos(self, owner_username: str) -> List[Video]:
         """Get all videos for a specific owner."""
         resp = self.video_repo.list_by_owner(owner_username)
         return resp.get("items", [])
 
     def _assert_ownership(self, video_id: str, owner_username: str) -> bool:
         """Return True if the given user owns the video_id."""
-        info = self.video_repo.get(video_id, owner_username)
-        if not info:
+        video = self.video_repo.get(video_id, owner_username)
+        if not video:
             return False
-        return info.get("owner_username") == owner_username
+        return video.owner_username == owner_username
     
     def delete_video(self, video_id: str, owner_username: str) -> bool:
         """Delete files whose paths are stored in metadata, then remove metadata entry.
         
         Returns True if the video existed and was removed, else False.
         """
-        info = self.video_repo.get(video_id, owner_username)
-        if not info:
+        video = self.video_repo.get(video_id, owner_username)
+        if not video:
             return False
-        if info.get("owner_username") != owner_username:
+        if video.owner_username != owner_username:
             # Do not allow deleting others' videos
             return False
         
         # Delete S3 file if it exists
-        s3_key = info.get("s3_key")
-        if s3_key:
+        if video.s3_key:
             try:
-                self.s3_client.delete_object(Bucket=self.s3_bucket, Key=s3_key)
+                self.s3_client.delete_object(Bucket=self.s3_bucket, Key=video.s3_key)
             except Exception:
                 # Keep deletion best-effort; do not raise
                 pass
         
         # Delete transcript artifacts from S3 if present
         for tk in [
-            info.get("transcript_s3_key"),
-            info.get("transcript_text_s3_key"),
-            info.get("transcript_metadata_s3_key"),
+            video.transcript_s3_key,
+            video.transcript_text_s3_key,
+            video.transcript_metadata_s3_key,
         ]:
             if not tk:
                 continue
@@ -185,21 +188,18 @@ class VideoService:
         """Process video or audio: extract audio, transcribe, summarize."""
         logger.info(f"Starting video processing for ID: {video_id}")
         
-        current = self.video_repo.get(video_id, owner_username)
-        if not current:
+        video = self.video_repo.get(video_id, owner_username)
+        if not video:
             raise ValueError("File not found")
         if not self._assert_ownership(video_id, owner_username):
             raise ValueError("Not allowed")
         
-        file_info = current
-        
         # Download file from S3
-        if "s3_key" not in file_info or not file_info["s3_key"]:
+        if not video.s3_key:
             raise ValueError("S3 key not found for this file")
-        s3_key = file_info["s3_key"]
-        file_path = self.videos_dir / f"{video_id}_{file_info['filename']}"
+        file_path = self.videos_dir / f"{video_id}_{video.filename}"
         try:
-            self.s3_client.download_file(self.s3_bucket, s3_key, str(file_path))
+            self.s3_client.download_file(self.s3_bucket, video.s3_key, str(file_path))
         except Exception as e:
             raise ValueError(f"Failed to download file from S3: {str(e)}")
         
@@ -213,7 +213,7 @@ class VideoService:
         
         try:
             # For audio files, use directly; for video files, extract audio
-            if file_info["file_type"] == "audio":
+            if video.file_type == "audio":
                 audio_path = file_path
             else:
                 # Extract audio from video
@@ -264,7 +264,7 @@ class VideoService:
             logger.debug(f"Invalidated cache for completed video {video_id}")
         
         # Clean up temporary files downloaded from S3
-        if "s3_key" in file_info:
+        if video.s3_key:
             try:
                 if file_path.exists():
                     file_path.unlink()
@@ -340,26 +340,25 @@ class VideoService:
     
     def get_transcript(self, video_id: str, owner_username: str) -> Optional[str]:
         """Get transcript.txt content for the given video."""
-        video_info = self.get_video_info(video_id, owner_username)
-        if not video_info or video_info.get("status") != "completed":
+        video = self.get_video_info(video_id, owner_username)
+        if not video or video.status != "completed":
             return None
-        if video_info.get("owner_username") != owner_username:
+        if video.owner_username != owner_username:
             return None
             
         try:
-            text_key = video_info.get("transcript_text_s3_key")
-            if not text_key:
+            if not video.transcript_text_s3_key:
                 return None
-            obj = self.s3_client.get_object(Bucket=self.s3_bucket, Key=text_key)
+            obj = self.s3_client.get_object(Bucket=self.s3_bucket, Key=video.transcript_text_s3_key)
             return obj["Body"].read().decode("utf-8")
         except Exception:
             return None
     
     def get_summary(self, video_id: str, owner_username: str) -> Optional[str]:
         """Get video summary."""
-        video_info = self.get_video_info(video_id, owner_username)
-        if video_info and video_info.get("status") == "completed":
-            if video_info.get("owner_username") == owner_username:
-                return video_info.get("summary")
+        video = self.get_video_info(video_id, owner_username)
+        if video and video.status == "completed":
+            if video.owner_username == owner_username:
+                return video.summary
         return None
     

@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from app.core.config import get_settings
+from app.schemas.video import Video
 
 
 class VideoRepository:
@@ -82,14 +83,19 @@ class VideoRepository:
         
         self.update_fields(video_id, update_fields, owner_username)
 
-    def get(self, video_id: str, owner_username: str) -> Optional[Dict[str, Any]]:
+    def get(self, video_id: str, owner_username: str) -> Optional[Video]:
+        """Get video information and return as domain model"""
         sort_key = f"{owner_username}#{video_id}"
         resp = self.videos_table.get_item(
             Key={"qut-username": self.qut_username, "sort-key": sort_key}
         )
-        return resp.get("Item")
+        item = resp.get("Item")
+        if not item:
+            return None
+        return Video.from_dict(item)
 
     def list_by_owner(self, owner_username: str, limit: int = 100, last_key: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Get user's video list and return as list of domain models"""
         params: Dict[str, Any] = {
             "KeyConditionExpression": Key("qut-username").eq(self.qut_username) & Key("sort-key").begins_with(f"{owner_username}#"),
             "ScanIndexForward": False,  # Sort by sort-key descending
@@ -101,20 +107,7 @@ class VideoRepository:
         resp = self.videos_table.query(**params)
         items = resp.get("Items", [])
         return {
-            "items": [
-                {
-                    "video_id": it.get("video_id"),
-                    "filename": it.get("filename"),
-                    "summary": it.get("summary"),
-                    "transcript": it.get("transcript"),
-                    "created_at": it.get("created_at"),
-                    "status": it.get("status", "uploaded"),
-                    "file_type": it.get("file_type"),
-                    "s3_key": it.get("s3_key"),
-                    "s3_bucket": it.get("s3_bucket"),
-                }
-                for it in items
-            ],
+            "items": [Video.from_dict(it) for it in items],
             "last_evaluated_key": resp.get("LastEvaluatedKey"),
         }
 

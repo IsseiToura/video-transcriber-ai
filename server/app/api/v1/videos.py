@@ -89,7 +89,7 @@ async def get_videos(
     """Get all videos for the current user."""
     try:
         videos = video_service.get_all_videos(current_user["username"])
-        return videos
+        return [VideoInfo.from_domain(video) for video in videos]
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -102,29 +102,19 @@ async def get_video_info(
     current_user: dict = Depends(get_current_user)
 ):
     """Get video information."""
-    video_info = video_service.get_video_info(video_id, current_user["username"])
-    if not video_info:
+    video = video_service.get_video_info(video_id, current_user["username"])
+    if not video:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Video not found"
         )
-    if video_info.get("owner_username") != current_user["username"]:
+    if video.owner_username != current_user["username"]:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Video not found"
         )
     
-    return VideoInfo(
-        video_id=video_id,
-        filename=video_info["filename"],
-        summary=video_info.get("summary"),
-        transcript=video_info.get("transcript"),
-        created_at=video_info["created_at"],
-        status=video_info.get("status", "uploaded"),
-        file_type=video_info.get("file_type"),
-        s3_key=video_info.get("s3_key"),
-        s3_bucket=video_info.get("s3_bucket")
-    )
+    return VideoInfo.from_domain(video)
 
 @router.delete("/{video_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_video(
