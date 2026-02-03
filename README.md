@@ -82,8 +82,7 @@ video-transcriber-ai/
 │   │   │   ├── sqs_client.py       # SQS operations
 │   │   │   └── text_compressor.py  # Transcript compression
 │   │   ├── repositories/           # Data access layer
-│   │   │   ├── video_repository.py # Video data access abstraction
-│   │   │   └── dynamodb_client.py  # DynamoDB operations
+│   │   │   └── video_repository.py # Video data access (DynamoDB)
 │   │   ├── lambda/                 # Lambda functions
 │   │   │   └── s3_trigger_handler.py # S3 event processing
 │   │   ├── worker/                 # Background workers

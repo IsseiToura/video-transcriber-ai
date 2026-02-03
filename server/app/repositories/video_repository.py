@@ -2,15 +2,21 @@
 Video repository backed by DynamoDB.
 """
 
+import boto3
+from boto3.dynamodb.conditions import Key
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from app.repositories.dynamodb_client import DynamoDBClient
+from app.core.config import get_settings
 
 
 class VideoRepository:
-    def __init__(self, ddb: Optional[DynamoDBClient] = None) -> None:
-        self._ddb = ddb or DynamoDBClient()
+    def __init__(self) -> None:
+        settings = get_settings()
+        self.qut_username = settings.QUT_USERNAME
+        session = boto3.session.Session(region_name=settings.AWS_REGION)
+        self._ddb = session.resource("dynamodb", region_name=settings.AWS_REGION)
+        self.videos_table = self._ddb.Table(settings.DDB_VIDEOS_TABLE)
 
     def save_metadata(
         self,
@@ -24,17 +30,12 @@ class VideoRepository:
         created_at: Optional[str] = None,
         status: str = "uploaded",
     ) -> str:
-        # Get QUT username from settings (fixed AWS account username)
-        from app.core.config import get_settings
-        settings = get_settings()
-        qut_username = settings.QUT_USERNAME
-        
         # Create composite sort key: owner_username#video_id
         sort_key = f"{owner_username}#{video_id}"
         
         item: Dict[str, Any] = {
-            "qut-username": qut_username,    # Partition Key (fixed QUT account)
-            "sort-key": sort_key,            # Sort Key (owner_username#video_id)
+            "qut-username": self.qut_username,    # Partition Key (fixed QUT account)
+            "sort-key": sort_key,                 # Sort Key (owner_username#video_id)
             "video_id": video_id,            
             "filename": filename,
             "s3_key": s3_key,
@@ -44,7 +45,7 @@ class VideoRepository:
             "status": status,
             "owner_username": owner_username,  # App user identifier
         }
-        self._ddb.put_video(item)
+        self.videos_table.put_item(Item=item)
         return video_id
 
     def save_transcript_data(
@@ -82,10 +83,22 @@ class VideoRepository:
         self.update_fields(video_id, update_fields, owner_username)
 
     def get(self, video_id: str, owner_username: str) -> Optional[Dict[str, Any]]:
-        return self._ddb.get_video(video_id, owner_username)
+        sort_key = f"{owner_username}#{video_id}"
+        resp = self.videos_table.get_item(
+            Key={"qut-username": self.qut_username, "sort-key": sort_key}
+        )
+        return resp.get("Item")
 
     def list_by_owner(self, owner_username: str, limit: int = 100, last_key: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        resp = self._ddb.query_videos_by_owner(owner_username, limit=limit, last_evaluated_key=last_key)
+        params: Dict[str, Any] = {
+            "KeyConditionExpression": Key("qut-username").eq(self.qut_username) & Key("sort-key").begins_with(f"{owner_username}#"),
+            "ScanIndexForward": False,  # Sort by sort-key descending
+            "Limit": limit,
+        }
+        if last_key:
+            params["ExclusiveStartKey"] = last_key
+        
+        resp = self.videos_table.query(**params)
         items = resp.get("Items", [])
         return {
             "items": [
@@ -106,21 +119,28 @@ class VideoRepository:
         }
 
     def delete(self, video_id: str, owner_username: str) -> None:
-        self._ddb.delete_video(video_id, owner_username)
+        sort_key = f"{owner_username}#{video_id}"
+        self.videos_table.delete_item(
+            Key={"qut-username": self.qut_username, "sort-key": sort_key}
+        )
 
     def update_fields(self, video_id: str, fields: Dict[str, Any], owner_username: str) -> Dict[str, Any]:
         if not fields:
-            current = self._ddb.get_video(video_id, owner_username)
+            current = self.get(video_id, owner_username)
             return current or {}
+        
         update_expr_parts: List[str] = []
         expr_vals: Dict[str, Any] = {}
         for key, value in fields.items():
             update_expr_parts.append(f"#{key} = :{key}")
             expr_vals[f":{key}"] = value
+        
         update_expression = "SET " + ", ".join(update_expr_parts)
         expression_names = {f"#{k}": k for k in fields.keys()}
-        result = self._ddb.videos_table.update_item(
-            Key={"qut-username": self._ddb.qut_username, "sort-key": f"{owner_username}#{video_id}"},
+        sort_key = f"{owner_username}#{video_id}"
+        
+        result = self.videos_table.update_item(
+            Key={"qut-username": self.qut_username, "sort-key": sort_key},
             UpdateExpression=update_expression,
             ExpressionAttributeValues=expr_vals,
             ExpressionAttributeNames=expression_names,
