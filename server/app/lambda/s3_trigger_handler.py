@@ -44,8 +44,6 @@ def process_s3_record(record: Dict[str, Any], config: Dict[str, Any]) -> bool:
         logger.error(f"Could not extract video_id from S3 key: {s3_key}")
         return False
     
-    logger.info(f"Extracted video_id: {video_id}")
-    
     # Get metadata from DynamoDB (with retry logic)
     metadata = get_video_metadata_from_dynamodb(
         config['videos_table'], 
@@ -61,8 +59,6 @@ def process_s3_record(record: Dict[str, Any], config: Dict[str, Any]) -> bool:
     if not owner_username:
         logger.error(f"owner_username not found in metadata for video_id: {video_id}")
         return False
-    
-    logger.info(f"Found owner_username: {owner_username} for video_id: {video_id}")
     
     # Check current status
     current_status = metadata.get('status', 'uploaded')
@@ -116,12 +112,9 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Returns:
         Response dict with status code and message
     """
-    logger.info(f"Received event: {json.dumps(event)}")
-    
     try:
         # Initialize configuration in invoke phase (not init phase)
         config = get_config()
-        logger.info("Configuration initialized successfully")
         
         # Process each S3 record
         for record in event.get('Records', []):

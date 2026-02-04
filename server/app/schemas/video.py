@@ -108,8 +108,3 @@ class VideoMetadataRequest(BaseModel):
     fileId: str
     filename: str
     s3Key: str
-
-class ErrorResponse(BaseModel):
-    """Error response schema."""
-    detail: str
-    error_code: Optional[str] = None

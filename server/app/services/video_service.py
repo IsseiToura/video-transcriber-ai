@@ -74,9 +74,7 @@ class VideoService:
         )
         
         # Invalidate cache for this video
-        if cache_client.is_available():
-            cache_client.invalidate_video_info(file_id, owner_username)
-            logger.debug(f"Invalidated cache for new video {file_id}")
+        self._invalidate_cache(file_id, owner_username, "new video")
         
         return file_id
     
@@ -134,13 +132,6 @@ class VideoService:
         """Get all videos for a specific owner."""
         resp = self.video_repo.list_by_owner(owner_username)
         return resp.get("items", [])
-
-    def _assert_ownership(self, video_id: str, owner_username: str) -> bool:
-        """Return True if the given user owns the video_id."""
-        video = self.video_repo.get(video_id, owner_username)
-        if not video:
-            return False
-        return video.owner_username == owner_username
     
     def delete_video(self, video_id: str, owner_username: str) -> bool:
         """Delete files whose paths are stored in metadata, then remove metadata entry.
@@ -178,9 +169,7 @@ class VideoService:
         self.video_repo.delete(video_id, owner_username)
         
         # Invalidate cache when video is deleted
-        if cache_client.is_available():
-            cache_client.invalidate_video_info(video_id, owner_username)
-            logger.debug(f"Invalidated cache for deleted video {video_id}")
+        self._invalidate_cache(video_id, owner_username, "deleted")
         
         return True
     
@@ -207,9 +196,7 @@ class VideoService:
         self.video_repo.update_fields(video_id, {"status": "processing"}, owner_username)
         
         # Invalidate cache when status changes
-        if cache_client.is_available():
-            cache_client.invalidate_video_info(video_id, owner_username)
-            logger.debug(f"Invalidated cache for processing video {video_id}")
+        self._invalidate_cache(video_id, owner_username, "status changed to processing")
         
         try:
             # For audio files, use directly; for video files, extract audio
@@ -234,9 +221,7 @@ class VideoService:
             self.video_repo.update_fields(video_id, {"status": "error"}, owner_username)
             
             # Invalidate cache when status changes to error
-            if cache_service.is_available():
-                cache_service.invalidate_video_info(video_id, owner_username)
-                logger.debug(f"Invalidated cache for error video {video_id}")
+            self._invalidate_cache(video_id, owner_username, "status changed to error")
             
             logger.error(f"Error processing video {video_id}: {e}")
             raise
@@ -259,9 +244,7 @@ class VideoService:
         self.video_repo.update_fields(video_id, {"status": "completed"}, owner_username)
         
         # Invalidate cache when processing completes
-        if cache_client.is_available():
-            cache_client.invalidate_video_info(video_id, owner_username)
-            logger.debug(f"Invalidated cache for completed video {video_id}")
+        self._invalidate_cache(video_id, owner_username, "status changed to completed")
         
         # Clean up temporary files downloaded from S3
         if video.s3_key:
@@ -278,6 +261,50 @@ class VideoService:
         return {
             "summary": summary
         }
+    
+    def get_transcript(self, video_id: str, owner_username: str) -> Optional[str]:
+        """Get transcript.txt content for the given video."""
+        video = self.get_video_info(video_id, owner_username)
+        if not video or video.status != "completed":
+            return None
+        if video.owner_username != owner_username:
+            return None
+            
+        try:
+            if not video.transcript_text_s3_key:
+                return None
+            obj = self.s3_client.get_object(Bucket=self.s3_bucket, Key=video.transcript_text_s3_key)
+            return obj["Body"].read().decode("utf-8")
+        except Exception:
+            return None
+    
+    def get_summary(self, video_id: str, owner_username: str) -> Optional[str]:
+        """Get video summary."""
+        video = self.get_video_info(video_id, owner_username)
+        if video and video.status == "completed":
+            if video.owner_username == owner_username:
+                return video.summary
+        return None
+    
+    # === Private methods ===
+    
+    def _invalidate_cache(self, video_id: str, owner_username: str, reason: str = "") -> None:
+        """Invalidate cache for video."""
+        if not cache_client.is_available():
+            return
+        
+        cache_client.invalidate_video_info(video_id, owner_username)
+        if reason:
+            logger.debug(f"Invalidated cache for video {video_id}: {reason}")
+        else:
+            logger.debug(f"Invalidated cache for video {video_id}")
+    
+    def _assert_ownership(self, video_id: str, owner_username: str) -> bool:
+        """Return True if the given user owns the video_id."""
+        video = self.video_repo.get(video_id, owner_username)
+        if not video:
+            return False
+        return video.owner_username == owner_username
     
     def _save_transcript(self, video_id: str, segments) -> Dict:
         """Save transcript data to S3 (JSON, TXT, and metadata)."""
@@ -337,28 +364,3 @@ class VideoService:
                     transcript_parts.append(text)
         
         return " ".join(transcript_parts)
-    
-    def get_transcript(self, video_id: str, owner_username: str) -> Optional[str]:
-        """Get transcript.txt content for the given video."""
-        video = self.get_video_info(video_id, owner_username)
-        if not video or video.status != "completed":
-            return None
-        if video.owner_username != owner_username:
-            return None
-            
-        try:
-            if not video.transcript_text_s3_key:
-                return None
-            obj = self.s3_client.get_object(Bucket=self.s3_bucket, Key=video.transcript_text_s3_key)
-            return obj["Body"].read().decode("utf-8")
-        except Exception:
-            return None
-    
-    def get_summary(self, video_id: str, owner_username: str) -> Optional[str]:
-        """Get video summary."""
-        video = self.get_video_info(video_id, owner_username)
-        if video and video.status == "completed":
-            if video.owner_username == owner_username:
-                return video.summary
-        return None
-    

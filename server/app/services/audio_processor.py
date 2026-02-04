@@ -47,6 +47,8 @@ class AudioProcessor:
     def __init__(self):
         self.text_compressor = TextCompressor()
     
+    # === Public methods ===
+    
     def extract_audio(self, video_path: Path, audio_path: Path):
         """Extract audio from video using ffmpeg."""
         try:
@@ -63,57 +65,6 @@ class AudioProcessor:
             audio_path.touch()
             logger.warning(f"Audio extraction failed, created empty audio file. Video: {video_path}, Audio: {audio_path}")
     
-    def _get_audio_duration_seconds(self, audio_path: Path) -> float:
-        """Return audio duration in seconds using ffprobe."""
-        try:
-            cmd = [
-                "ffprobe",
-                "-v",
-                "error",
-                "-show_entries",
-                "format=duration",
-                "-of",
-                "default=noprint_wrappers=1:nokey=1",
-                str(audio_path),
-            ]
-            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-            return float(result.stdout.strip())
-        except Exception:
-            return 0.0
-
-    def _split_audio_into_chunks(self, audio_path: Path, chunk_seconds: int = 600) -> Tuple[Path, List[Path]]:
-        """Split audio into N-minute chunks using ffmpeg segmenter. Returns (chunks_dir, chunk_paths)."""
-        chunks_dir = audio_path.parent / f"{audio_path.stem}_chunks"
-        if chunks_dir.exists():
-            shutil.rmtree(chunks_dir)
-        chunks_dir.mkdir(parents=True, exist_ok=True)
-
-        chunk_pattern = str(chunks_dir / "chunk_%03d.wav")
-
-        cmd = [
-            "ffmpeg",
-            "-i",
-            str(audio_path),
-            "-vn",
-            "-acodec",
-            "pcm_s16le",
-            "-ar",
-            "16000",
-            "-ac",
-            "1",
-            "-f",
-            "segment",
-            "-segment_time",
-            str(chunk_seconds),
-            chunk_pattern,
-            "-y",
-        ]
-
-        subprocess.run(cmd, check=True, capture_output=True)
-
-        chunk_paths = sorted(Path(p) for p in glob.glob(str(chunks_dir / "chunk_*.wav")))
-        return chunks_dir, chunk_paths
-
     def transcribe_audio(self, audio_path: Path) -> List[Dict]:
         """Transcribe audio by splitting into 10-minute chunks and processing in parallel (max_workers=2)."""
         try:
@@ -186,3 +137,38 @@ class AudioProcessor:
             print(f"Error in transcription: {e}")
             # Fallback: return empty segments list
             return []
+    
+    # === Private methods ===
+    
+    def _split_audio_into_chunks(self, audio_path: Path, chunk_seconds: int = 600) -> Tuple[Path, List[Path]]:
+        """Split audio into N-minute chunks using ffmpeg segmenter. Returns (chunks_dir, chunk_paths)."""
+        chunks_dir = audio_path.parent / f"{audio_path.stem}_chunks"
+        if chunks_dir.exists():
+            shutil.rmtree(chunks_dir)
+        chunks_dir.mkdir(parents=True, exist_ok=True)
+
+        chunk_pattern = str(chunks_dir / "chunk_%03d.wav")
+
+        cmd = [
+            "ffmpeg",
+            "-i",
+            str(audio_path),
+            "-vn",
+            "-acodec",
+            "pcm_s16le",
+            "-ar",
+            "16000",
+            "-ac",
+            "1",
+            "-f",
+            "segment",
+            "-segment_time",
+            str(chunk_seconds),
+            chunk_pattern,
+            "-y",
+        ]
+
+        subprocess.run(cmd, check=True, capture_output=True)
+
+        chunk_paths = sorted(Path(p) for p in glob.glob(str(chunks_dir / "chunk_*.wav")))
+        return chunks_dir, chunk_paths

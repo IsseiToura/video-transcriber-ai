@@ -82,27 +82,3 @@ async def require_admin_user(
         )
     
     return current_user
-
-
-async def require_verified_email(
-    current_user: Dict[str, Any] = Depends(get_current_user)
-) -> Dict[str, Any]:
-    """
-    Require verified email address.
-    
-    Args:
-        current_user: Current authenticated user
-        
-    Returns:
-        User information dict
-        
-    Raises:
-        HTTPException: If email is not verified
-    """
-    if not current_user.get('email_verified', False):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Email verification required"
-        )
-    
-    return current_user

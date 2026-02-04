@@ -63,7 +63,6 @@ def get_video_metadata_from_dynamodb(videos_table, qut_username: str, video_id: 
             items = response.get('Items', [])
             
             if items:
-                logger.info(f"Found metadata for video_id: {video_id}")
                 # Return the first item (should be unique for a given video_id)
                 return items[0]
             

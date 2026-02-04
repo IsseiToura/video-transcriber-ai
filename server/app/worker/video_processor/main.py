@@ -36,45 +36,7 @@ class VideoProcessingWorker:
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
     
-    def _signal_handler(self, signum, frame):
-        """Handle shutdown signals gracefully."""
-        logger.info(f"Received signal {signum}, shutting down gracefully...")
-        self.running = False
-    
-    def _process_message(self, message: dict) -> bool:
-        """Process a single SQS message."""
-        # Parse the message
-        job_data = self.message_handler.parse_message(message)
-        if not job_data or not self.message_handler.is_valid_job_data(job_data):
-            # Invalid message, delete it
-            self.sqs_client.delete_message(message)
-            return False
-        
-        video_id = job_data['video_id']
-        owner_username = job_data['owner_username']
-        
-        try:
-            # Process the job
-            success = self.job_processor.process_single_job(job_data, message)
-            
-            if success:
-                # Delete message from queue after successful processing
-                self.sqs_client.delete_message(message)
-                logger.info(f"Job completed successfully for video {video_id}")
-                return True
-            else:
-                # Processing failed due to validation error (video not found, etc.)
-                # Delete message to prevent infinite retries
-                self.sqs_client.delete_message(message)
-                logger.warning(f"Job failed validation for video {video_id}, deleted from queue")
-                return False
-        
-        except Exception as e:
-            # Processing error - let SQS handle retries
-            video_id = job_data['video_id']
-            logger.error(f"Job failed for video {video_id}, will be retried by SQS: {e}")
-            # Don't delete message - let SQS retry mechanism handle it
-            return False
+    # === Public methods ===
     
     def run(self):
         """Main worker loop - poll SQS and process jobs."""
@@ -107,6 +69,36 @@ class VideoProcessingWorker:
                 time.sleep(ERROR_RETRY_DELAY)  # Wait before retrying
         
         logger.info("Video processing worker stopped")
+    
+    # === Private methods ===
+    
+    def _signal_handler(self, signum, frame):
+        """Handle shutdown signals gracefully."""
+        logger.info(f"Received signal {signum}, shutting down gracefully...")
+        self.running = False
+    
+    def _process_message(self, message: dict) -> bool:
+        """
+        Process a single SQS message.
+        
+        Orchestrates message processing by delegating all business logic
+        to JobProcessor and handling SQS message cleanup.
+        """
+        try:
+            should_delete = self.job_processor.process_video_job(
+                message, 
+                self.message_handler
+            )
+            
+            # Handle SQS cleanup based on processing result
+            if should_delete:
+                self.sqs_client.delete_message(message)
+            
+            return should_delete
+            
+        except Exception as e:
+            logger.error(f"Failed to process message: {e}")
+            return False
 
 
 def main():

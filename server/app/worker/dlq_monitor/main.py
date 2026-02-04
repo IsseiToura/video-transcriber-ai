@@ -36,40 +36,7 @@ class DLQMonitor:
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
     
-    def _signal_handler(self, signum, frame):
-        """Handle shutdown signals gracefully."""
-        logger.info(f"Received signal {signum}, shutting down gracefully...")
-        self.running = False
-    
-    def _process_dlq_message(self, message: dict) -> bool:
-        """Process a single DLQ message."""
-        # Parse the message
-        job_data = self.message_handler.parse_message(message)
-        if not job_data or not self.message_handler.is_valid_job_data(job_data):
-            # Invalid message, delete it
-            self.sqs_client.delete_message_from_dlq(message)
-            return False
-        
-        video_id = job_data['video_id']
-        owner_username = job_data['owner_username']
-        
-        logger.warning(f"Processing failed job from DLQ: {video_id} for user: {owner_username}")
-        
-        try:
-            # Mark video status as failed in database
-            self.job_processor.mark_video_as_failed(video_id, owner_username)
-            
-            # Log the failure for monitoring
-            logger.error(f"Video processing permanently failed - video_id: {video_id}, user: {owner_username}")
-            
-            # Delete the message from DLQ after processing
-            self.sqs_client.delete_message_from_dlq(message)
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to process DLQ message for video {video_id}: {e}")
-            # Don't delete message if we can't process it - will retry later
-            return False
+    # === Public methods ===
     
     def run(self):
         """Main DLQ monitoring loop."""
@@ -88,7 +55,7 @@ class DLQMonitor:
                     if not self.running:
                         break
                     
-                    self._process_dlq_message(message)
+                    self._handle_failed_job_message(message)
                 
                 # If no messages received, sleep briefly to avoid excessive polling
                 if not messages:
@@ -102,6 +69,43 @@ class DLQMonitor:
                 time.sleep(ERROR_RETRY_DELAY)  # Wait before retrying
         
         logger.info("DLQ monitor stopped")
+    
+    # === Private methods ===
+    
+    def _signal_handler(self, signum, frame):
+        """Handle shutdown signals gracefully."""
+        logger.info(f"Received signal {signum}, shutting down gracefully...")
+        self.running = False
+    
+    def _handle_failed_job_message(self, message: dict) -> bool:
+        """
+        Handle a single failed job message from DLQ.
+        
+        Orchestrates message processing by delegating all business logic
+        to JobProcessor and handling SQS message cleanup.
+        
+        Args:
+            message: Raw SQS message from DLQ
+            
+        Returns:
+            True if message was processed successfully, False otherwise
+        """
+        try:
+            # Delegate all business logic to JobProcessor
+            should_delete = self.job_processor.process_failed_video_job(
+                message, 
+                self.message_handler
+            )
+            
+            # Handle SQS cleanup based on processing result
+            if should_delete:
+                self.sqs_client.delete_message_from_dlq(message)
+            
+            return should_delete
+            
+        except Exception as e:
+            logger.error(f"Failed to handle DLQ message: {e}")
+            return False
 
 
 def main():

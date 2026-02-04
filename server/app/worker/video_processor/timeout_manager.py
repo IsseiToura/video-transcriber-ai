@@ -7,6 +7,7 @@ import threading
 import time
 from typing import Dict
 
+from app.services.video_service import VideoService
 from .config import DEFAULT_TIMEOUT, MAX_TIMEOUT, TIMEOUT_CHECK_INTERVAL, TIMEOUT_BUFFER
 
 logger = logging.getLogger(__name__)
@@ -18,8 +19,14 @@ class TimeoutManager:
     def __init__(self, sqs_client):
         self.sqs_client = sqs_client
     
-    def process_with_timeout_management(self, video_service, video_id: str, owner_username: str, 
-                                      message: Dict, start_time: float):
+    def process_with_timeout_management(
+        self, 
+        video_service: VideoService, 
+        video_id: str, 
+        owner_username: str, 
+        message: Dict, 
+        start_time: float
+    ):
         """Process video with periodic visibility timeout extension."""
         
         # Start a thread to monitor and extend visibility timeout

@@ -19,7 +19,52 @@ class JobProcessor:
         self.video_service = VideoService()
         self.timeout_manager = TimeoutManager(sqs_client)
     
-    def process_single_job(self, job_data: Dict, message: Dict) -> bool:
+    # === Public methods ===
+    
+    def process_video_job(self, message: Dict, message_handler) -> bool:
+        """
+        Process video transcription job.
+        
+        Args:
+            message: Raw SQS message
+            message_handler: Message parser instance
+            
+        Returns:
+            True if message should be deleted, False to retry
+        """
+        # Parse and validate message
+        job_data = message_handler.parse_message(message)
+        if not job_data or not message_handler.is_valid_job_data(job_data):
+            logger.warning("Invalid job data, marking for deletion")
+            return True  # Delete invalid messages
+        
+        # Extract job data
+        video_id = job_data['video_id']
+        
+        try:
+            success = self._process_single_job(job_data, message)
+            
+            if success:
+                logger.info(f"Job completed successfully for video {video_id}")
+                return True  # Delete message
+            else:
+                # Validation error (video not found, etc.)
+                logger.warning(
+                    f"Job failed validation for video {video_id}, "
+                    f"deleted from queue"
+                )
+                return True  # Delete message (won't succeed on retry)
+        
+        except Exception as e:
+            # Processing error - let SQS handle retries
+            logger.error(
+                f"Job failed for video {video_id}, will be retried by SQS: {e}"
+            )
+            return False  # Don't delete - retry later
+    
+    # === Private methods ===
+    
+    def _process_single_job(self, job_data: Dict, message: Dict) -> bool:
         """Process a single video job with visibility timeout management."""
         video_id = job_data['video_id']
         owner_username = job_data['owner_username']
@@ -30,7 +75,7 @@ class JobProcessor:
         start_time = time.time()
         
         try:
-            # Process the video using the existing VideoService with timeout management
+            # Process the video with timeout management
             result = self.timeout_manager.process_with_timeout_management(
                 self.video_service, video_id, owner_username, message, start_time
             )
