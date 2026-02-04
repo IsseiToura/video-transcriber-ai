@@ -1,5 +1,8 @@
 # Video Transcriber AI
 
+## Demo
+https://drive.google.com/file/d/148G58xbbKbqI2g_KrXs0q6bM7yWfGm9S/view?usp=sharing
+
 ## Overview
 
 This is a production-ready, scalable video transcription system that leverages AWS managed services and modern cloud architecture patterns. The application provides automatic video transcription using Whisper and AI-generated summary.
