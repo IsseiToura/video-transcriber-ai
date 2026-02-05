@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { Eye, EyeOff, Lock, Mail, User, Video } from "lucide-react";
-import { cognitoService } from "../services/cognitoService";
-import type { SignUpRequest } from "../types/auth";
+import { cognitoService } from "../../services/cognitoService";
+import type { SignUpRequest } from "../../types/auth";
 
 interface SignUpProps {
   onSuccess: (username: string, email: string) => void;
   onSwitchToSignIn: () => void;
 }
 
-export const SignUp = ({ onSuccess, onSwitchToSignIn }: SignUpProps) => {
+const SignUp = ({ onSuccess, onSwitchToSignIn }: SignUpProps) => {
   const [formData, setFormData] = useState<SignUpRequest>({
     username: "",
     email: "",
@@ -292,3 +292,5 @@ export const SignUp = ({ onSuccess, onSwitchToSignIn }: SignUpProps) => {
     </div>
   );
 };
+
+export default SignUp;

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import type { ReactNode } from "react";
-import { cognitoService, cognitoApiService } from "../services";
+import { cognitoService } from "../services";
 import type { User } from "../types/auth";
 
 type AuthView = "signin" | "signup" | "email-confirmation";
@@ -45,7 +45,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const checkAuth = async () => {
     setIsLoading(true);
     try {
-      const isAuth = await cognitoApiService.isAuthenticated();
+      const isAuth = await cognitoService.isAuthenticatedWithValidation();
       if (isAuth) {
         const cognitoUser = await cognitoService.getCurrentUser();
         const tokens = await cognitoService.getCurrentUserTokens();

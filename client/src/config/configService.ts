@@ -3,7 +3,7 @@
  */
 
 import type { AppConfig, CognitoConfig, ApiConfig } from "../types/config";
-import { ApiEndpoints } from "../config/api";
+import { ApiEndpoints } from "./api";
 
 class ConfigService {
   private config: AppConfig | null = null;

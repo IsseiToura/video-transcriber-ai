@@ -1,8 +1,8 @@
 import { useState, useRef } from "react";
 import { Upload, FileVideo, Sparkles, Zap } from "lucide-react";
-import type { VideoInfo } from "../types/video";
-import { VideoService } from "../services";
-import { useAuth } from "../contexts/AuthContext";
+import type { VideoInfo } from "../../types/video";
+import { VideoService } from "../../services";
+import { useAuth } from "../../contexts/AuthContext";
 import toast from "react-hot-toast";
 
 interface VideoUploadProps {

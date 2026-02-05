@@ -4,7 +4,7 @@ interface FooterProps {
   className?: string;
 }
 
-export const Footer: React.FC<FooterProps> = ({ className = "" }) => {
+const Footer: React.FC<FooterProps> = ({ className = "" }) => {
   return (
     <div className={`text-center ${className}`}>
       <p className="text-indigo-200 text-sm">
@@ -13,3 +13,5 @@ export const Footer: React.FC<FooterProps> = ({ className = "" }) => {
     </div>
   );
 };
+
+export default Footer;

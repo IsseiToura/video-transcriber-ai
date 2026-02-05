@@ -1,5 +1,5 @@
 import { Upload, User, LogOut, FileVideo, Sparkles } from "lucide-react";
-import type { User as UserType } from "../types/auth";
+import type { User as UserType } from "../../types/auth";
 
 interface HeaderProps {
   user: UserType;
@@ -7,7 +7,7 @@ interface HeaderProps {
   onShowUpload: () => void;
 }
 
-export const Header = ({ user, onLogout, onShowUpload }: HeaderProps) => {
+const Header = ({ user, onLogout, onShowUpload }: HeaderProps) => {
   return (
     <header className="bg-white/80 backdrop-blur-lg shadow-lg border-b border-white/20 sticky top-0 z-50">
       <div className="flex items-center justify-between h-16 px-6">
@@ -60,3 +60,5 @@ export const Header = ({ user, onLogout, onShowUpload }: HeaderProps) => {
     </header>
   );
 };
+
+export default Header;

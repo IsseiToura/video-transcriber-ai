@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Mail, ArrowLeft, RefreshCw, Video } from "lucide-react";
-import { cognitoService } from "../services/cognitoService";
+import { cognitoService } from "../../services/cognitoService";
 
 interface EmailConfirmationProps {
   username: string;
@@ -9,7 +9,7 @@ interface EmailConfirmationProps {
   onBack: () => void;
 }
 
-export const EmailConfirmation = ({
+const EmailConfirmation = ({
   username,
   email,
   onSuccess,
@@ -209,3 +209,5 @@ export const EmailConfirmation = ({
     </div>
   );
 };
+
+export default EmailConfirmation;

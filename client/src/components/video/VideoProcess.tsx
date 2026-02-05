@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef } from "react";
 import { Sparkles, Zap, FileText } from "lucide-react";
-import type { VideoInfo } from "../types/video";
+import type { VideoInfo } from "../../types/video";
 import VideoDetail from "./VideoDetail";
-import { VideoService } from "../services";
-import { useAuth } from "../contexts/AuthContext";
+import { VideoService } from "../../services";
+import { useAuth } from "../../contexts/AuthContext";
 import toast from "react-hot-toast";
 
 interface VideoProcessProps {
@@ -30,11 +30,7 @@ const VideoProcess = ({ video }: VideoProcessProps) => {
   useEffect(() => {
     const startPolling = () => {
       // Start polling if video is processing or uploaded (waiting for Lambda to start processing)
-      if (
-        (processedVideo?.status === "processing" ||
-          processedVideo?.status === "uploaded") &&
-        user?.access_token
-      ) {
+      if ( (processedVideo?.status === "processing" || processedVideo?.status === "uploaded") && user?.access_token) {
         pollingIntervalRef.current = setInterval(async () => {
           try {
             const videoService = new VideoService();

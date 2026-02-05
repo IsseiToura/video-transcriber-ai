@@ -1,22 +1,20 @@
 /**
  * AWS Cognito configuration
+ * This file provides Amplify configuration for authentication
  */
 
-import { configService } from "../services/configService";
-import type { CognitoConfig } from "../types/config";
+import { configService } from "./configService";
 
-/**
- * Get Cognito configuration from server
- */
-export async function getCognitoConfig(): Promise<CognitoConfig> {
-  return await configService.getCognitoConfig();
-}
+// ========================================
+// Public Functions
+// ========================================
 
 /**
  * Get Amplify configuration
+ * Fetches Cognito configuration from server and transforms it to Amplify format
  */
 export async function getAmplifyConfig() {
-  const cognitoConfig = await getCognitoConfig();
+  const cognitoConfig = await configService.getCognitoConfig();
 
   return {
     Auth: {

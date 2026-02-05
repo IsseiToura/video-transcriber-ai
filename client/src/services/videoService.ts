@@ -1,10 +1,5 @@
 import { API_ENDPOINTS, apiRequestWithAuth } from "../config/api";
-import type {
-  VideoInfo,
-  VideoUploadResponse,
-  PresignedUrlResponse,
-  VideoMetadataRequest,
-} from "../types";
+import type { VideoInfo, VideoUploadResponse, PresignedUrlResponse, VideoMetadataRequest } from "../types";
 
 export class VideoService {
   /**

@@ -1,15 +1,8 @@
 import { useAuth } from "./contexts/AuthContext";
 import { useVideos } from "./hooks/useVideos";
 import { useVideoSelection } from "./hooks/useVideoSelection";
-import {
-  Header,
-  Sidebar,
-  MainContent,
-  Footer,
-  SignIn,
-  SignUp,
-  EmailConfirmation,
-} from "./layouts";
+import { Header, Sidebar, MainContent, Footer } from "./components/layout";
+import { SignIn, SignUp, EmailConfirmation } from "./components/auth";
 import type { VideoInfo } from "./types/video";
 import { Toaster } from "react-hot-toast";
 
@@ -39,6 +32,18 @@ function App() {
 
   const handleSignInSuccess = async () => {
     await checkAuth();
+  };
+
+  const handleUploadCompleteWithAdd = (newVideo: VideoInfo) => {
+    const video = handleUploadComplete(newVideo);
+    addVideo(video);
+  };
+
+  const handleVideoDeleted = (deletedId: string) => {
+    removeVideo(deletedId);
+    if (selectedVideo?.video_id === deletedId) {
+      clearSelection();
+    }
   };
 
   // Show loading state
@@ -82,11 +87,6 @@ function App() {
     }
   }
 
-  const handleUploadCompleteWithAdd = (newVideo: VideoInfo) => {
-    const video = handleUploadComplete(newVideo);
-    addVideo(video);
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50">
       <Header user={user} onLogout={logout} onShowUpload={showUploadForm} />
@@ -96,12 +96,7 @@ function App() {
           videos={videos}
           selectedVideo={selectedVideo}
           onVideoSelect={selectVideo}
-          onVideoDeleted={(deletedId: string) => {
-            removeVideo(deletedId);
-            if (selectedVideo?.video_id === deletedId) {
-              clearSelection();
-            }
-          }}
+          onVideoDeleted={handleVideoDeleted}
         />
 
         <main className="flex-1 overflow-y-auto bg-gradient-to-br from-slate-50">

@@ -1,7 +1,7 @@
 import { Download, Play, Sparkles } from "lucide-react";
-import type { VideoInfo } from "../types";
-import { useAuth } from "../contexts/AuthContext";
-import { VideoService } from "../services";
+import type { VideoInfo } from "../../types";
+import { useAuth } from "../../contexts/AuthContext";
+import { VideoService } from "../../services";
 
 interface VideoDetailProps {
   video: VideoInfo;

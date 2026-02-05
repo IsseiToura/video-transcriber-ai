@@ -54,15 +54,30 @@ The application is built using **AWS Cloud Architecture** with the following com
 video-transcriber-ai/
 ├── client/                          # Frontend React Application
 │   ├── src/
-│   │   ├── components/             # React components
-│   │   │   ├── VideoUpload.tsx     # Drag & drop upload
-│   │   │   ├── VideoList.tsx       # Video library
-│   │   │   ├── VideoDetail.tsx     # Video player & transcript
-│   │   │   └── VideoProcess.tsx    # Processing status
+│   │   ├── components/             # React components (organized by feature)
+│   │   │   ├── auth/               # Authentication components
+│   │   │   │   ├── SignIn.tsx      # Sign in form
+│   │   │   │   ├── SignUp.tsx      # Sign up form
+│   │   │   │   └── EmailConfirmation.tsx # Email verification
+│   │   │   ├── layout/             # Layout components
+│   │   │   │   ├── Header.tsx      # Application header
+│   │   │   │   ├── Sidebar.tsx     # Video list sidebar
+│   │   │   │   ├── MainContent.tsx # Main content area
+│   │   │   │   └── Footer.tsx      # Application footer
+│   │   │   └── video/              # Video-related components
+│   │   │       ├── VideoUpload.tsx # Drag & drop upload
+│   │   │       ├── VideoDetail.tsx # Video player & transcript
+│   │   │       └── VideoProcess.tsx # Processing status
 │   │   ├── contexts/               # React contexts (Auth)
-│   │   ├── services/               # API integration services
-│   │   ├── types/                  # TypeScript definitions
-│   │   └── layouts/                # Page layouts & auth flows
+│   │   ├── hooks/                  # Custom React hooks
+│   │   ├── services/               # Business logic services
+│   │   │   ├── cognitoService.ts   # Authentication service
+│   │   │   └── videoService.ts     # Video operations
+│   │   ├── config/                 # Configuration management
+│   │   │   ├── api.ts              # API endpoints & requests
+│   │   │   ├── cognito.ts          # Cognito configuration
+│   │   │   └── configService.ts    # Config fetching service
+│   │   └── types/                  # TypeScript definitions
 │   ├── public/                     # Static assets
 │   ├── Dockerfile                  # Container configuration
 │   └── package.json                # Dependencies

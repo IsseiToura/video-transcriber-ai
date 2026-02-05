@@ -1,25 +1,13 @@
 /**
  * AWS Cognito authentication service
+ * Handles all authentication-related operations including token validation
  */
 
 import { Amplify } from "aws-amplify";
-import {
-  signUp,
-  signIn,
-  signOut,
-  getCurrentUser,
-  confirmSignUp,
-  resendSignUpCode,
-  fetchAuthSession,
-} from "aws-amplify/auth";
+import { signUp, signIn, signOut, getCurrentUser, confirmSignUp, resendSignUpCode, fetchAuthSession } from "aws-amplify/auth";
 import { AMPLIFY_CONFIG } from "../config/cognito";
-import type {
-  SignUpRequest,
-  SignInRequest,
-  SignUpResponse,
-  SignInResponse,
-  CognitoUser,
-} from "../types/auth";
+import { API_ENDPOINTS, apiRequest } from "../config/api";
+import type { SignUpRequest, SignInRequest, SignUpResponse, SignInResponse, CognitoUser, TokenValidationResponse } from "../types/auth";
 
 // Initialize Amplify once at module level
 let amplifyInitialized = false;
@@ -194,7 +182,7 @@ export class CognitoService {
   }
 
   /**
-   * Check if user is authenticated
+   * Check if user is authenticated (Cognito only)
    */
   async isAuthenticated(): Promise<boolean> {
     try {
@@ -205,6 +193,47 @@ export class CognitoService {
     } catch (error) {
       return false;
     }
+  }
+
+  /**
+   * Check if user is authenticated and token is valid (with API validation)
+   */
+  async isAuthenticatedWithValidation(): Promise<boolean> {
+    try {
+      const isCognitoAuthenticated = await this.isAuthenticated();
+      if (!isCognitoAuthenticated) {
+        return false;
+      }
+
+      const validation = await this.validateToken();
+      return validation.valid;
+    } catch (error) {
+      console.error("Authentication check error:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Validate JWT token with the API
+   */
+  async validateToken(): Promise<TokenValidationResponse> {
+    const tokens = await this.getCurrentUserTokens();
+    if (!tokens) {
+      return { valid: false, user_info: undefined };
+    }
+
+    const response = await apiRequest(API_ENDPOINTS.AUTH.VALIDATE_TOKEN, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${tokens.accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      return { valid: false, user_info: undefined };
+    }
+
+    return response.json();
   }
 }
 

@@ -1,13 +1,13 @@
 import { Zap, Play, FileText, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   type VideoInfo,
   VIDEO_STATUS,
   VIDEO_STATUS_LABELS,
   VIDEO_STATUS_STYLES,
-} from "../types/video";
-import { useAuth } from "../contexts/AuthContext";
-import { VideoService } from "../services";
+} from "../../types/video";
+import { useAuth } from "../../contexts/AuthContext";
+import { VideoService } from "../../services";
 import { toast } from "react-hot-toast";
 
 interface SidebarProps {
@@ -17,14 +17,38 @@ interface SidebarProps {
   onVideoDeleted?: (videoId: string) => void;
 }
 
-export const Sidebar = ({
+// Helper function to get status icon based on video status
+const getStatusIcon = (status: VideoInfo["status"]) => {
+  switch (status) {
+    case VIDEO_STATUS.COMPLETED:
+      return (
+        <div className="h-10 w-10 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full flex items-center justify-center shadow-lg">
+          <Play className="h-5 w-5 text-white" />
+        </div>
+      );
+    case VIDEO_STATUS.PROCESSING:
+      return (
+        <div className="h-10 w-10 bg-gradient-to-r from-yellow-500 to-orange-600 rounded-full flex items-center justify-center shadow-lg">
+          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+        </div>
+      );
+    default:
+      return (
+        <div className="h-10 w-10 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center shadow-lg">
+          <FileText className="h-5 w-5 text-white" />
+        </div>
+      );
+  }
+};
+
+const Sidebar = ({
   videos,
   selectedVideo,
   onVideoSelect,
   onVideoDeleted,
 }: SidebarProps) => {
   const { user } = useAuth();
-  const videoService = new VideoService();
+  const videoService = useMemo(() => new VideoService(), []);
   const [displayVideos, setDisplayVideos] = useState<VideoInfo[]>(videos);
 
   useEffect(() => {
@@ -64,28 +88,6 @@ export const Sidebar = ({
     } catch (err) {
       // eslint-disable-next-line no-alert
       alert("Failed to delete");
-    }
-  };
-  const getStatusIcon = (status: VideoInfo["status"]) => {
-    switch (status) {
-      case VIDEO_STATUS.COMPLETED:
-        return (
-          <div className="h-10 w-10 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full flex items-center justify-center shadow-lg">
-            <Play className="h-5 w-5 text-white" />
-          </div>
-        );
-      case VIDEO_STATUS.PROCESSING:
-        return (
-          <div className="h-10 w-10 bg-gradient-to-r from-yellow-500 to-orange-600 rounded-full flex items-center justify-center shadow-lg">
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-          </div>
-        );
-      default:
-        return (
-          <div className="h-10 w-10 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center shadow-lg">
-            <FileText className="h-5 w-5 text-white" />
-          </div>
-        );
     }
   };
 
@@ -146,3 +148,5 @@ export const Sidebar = ({
     </aside>
   );
 };
+
+export default Sidebar;

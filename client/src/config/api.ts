@@ -1,12 +1,14 @@
-import { configService } from "../services/configService";
+import { configService } from "./configService";
 
-// Application Constants
+// ========================================
+// Constants
+// ========================================
+
 export const APP_CONFIG = {
   NAME: "Video Transcriber AI",
   VERSION: "0.1.0",
 };
 
-// API Endpoints
 export const API_ENDPOINTS = {
   AUTH: {
     ME: "/auth/me",
@@ -25,6 +27,10 @@ export const API_ENDPOINTS = {
     CONFIG: "/config/config",
   },
 };
+
+// ========================================
+// Private Helper Functions
+// ========================================
 
 // Get API base URL from environment variables (for initial config fetch)
 function getInitialApiBaseUrl(): string {
@@ -60,7 +66,10 @@ const initialApiRequest = async (
   return fetch(url, defaultOptions);
 };
 
-// API Endpoint Functions
+// ========================================
+// Public API Functions
+// ========================================
+
 export const ApiEndpoints = {
   async getConfig(): Promise<Response> {
     return initialApiRequest(API_ENDPOINTS.CONFIG.CONFIG, {
@@ -69,7 +78,6 @@ export const ApiEndpoints = {
   },
 };
 
-// API utility functions
 export const apiRequest = async (
   endpoint: string,
   options: RequestInit = {}
